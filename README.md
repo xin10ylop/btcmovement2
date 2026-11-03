@@ -1,11 +1,12 @@
 # BTC 5-minute reference-relative prediction
 
 A from-scratch system that continuously predicts how Bitcoin will trade **relative to the
-fixed opening price of the current 5-minute candle**, at three horizons:
+fixed opening price of the current 5-minute candle**, at five horizons:
 
 | head | question it answers at every second `e` of the window |
 |---|---|
-| **30s** | distribution of the price 30 s from now, relative to the window's fixed reference P0 |
+| **10s / 15s** | distribution of the price 10 s / 15 s from now, relative to the window's fixed reference P0 |
+| **30s** | the same, 30 s ahead |
 | **60s** | the same, 60 s ahead |
 | **close (5m)** | distribution of the 5-minute candle **close** relative to P0 (at `e = 0` this is the pure 5-minute forecast) |
 
@@ -150,16 +151,68 @@ optimistic inputs.
 
 > LADDER_PLACEHOLDER
 
-## 6. Usage
+## 7. Honest limitations
+
+* **The 5-minute direction at the open is barely predictable** (AUC ~0.54 at `e = 0` on the
+  holdout). That is what an efficient market looks like; the edge of this system lies in
+  volatility, tails, the no-move atom, path probabilities and the short-horizon drift - and
+  therefore grows as the window unfolds.
+* **Reference feed.** P0 and the close are Binance BTCUSDT spot. If your contracts settle on
+  another feed (e.g. an oracle aggregating several venues), retrain with that feed as the
+  "spot" series; the architecture does not change.
+* **No costs, fees, latency or market impact** are modelled - these are probability
+  forecasts, not a trading strategy. A forecast edge in log-loss is an edge in Kelly growth
+  only against a counterparty pricing with the weaker forecast and before costs.
+* **Regimes drift.** The close-pressure regime appeared in Feb 2026 and may change or
+  vanish. The model reads its current intensity online (`reg_cp*`), but nothing replaces
+  retraining: refit monthly (`scripts/train_production.py`), run the online recalibrator,
+  and monitor rolling log-loss vs the naive baseline (alarm if skill < 0 over 3 days).
+
+## 8. Usage
 
 ```bash
 pip install -r requirements.txt
-python -m btcmodel.data 2025-01-01 2026-11-02      # download + compact (≈20 min)
+python -m btcmodel.data 2025-01-01 2026-11-02      # download + compact (~20 min)
 python -m btcmodel.timeline                         # continuous 1s timeline
 python -m btcmodel.dataset                          # features/targets per split
-python scripts/train_eval.py valid h30              # train + evaluate one head (h30|h60|close)
-python scripts/train_eval.py test  close            # final holdout
+python scripts/build_targets_extra.py               # 10s/15s targets
+python scripts/build_regime.py                      # regime-state features
+python scripts/train_eval.py valid h30              # research protocol (train 2025, valid 2026H1)
+python scripts/evaluate_saved.py test h30           # frozen models on the holdout
+BTC_REGIME=1 python scripts/train_production.py --end 2026-04-30 --tag _wf5   # walk-forward
+BTC_REGIME=1 python scripts/train_production.py     # deployment refit on everything
 python -m tests.test_no_lookahead
+python -m tests.test_regime_no_lookahead
+python -m tests.test_predictor_consistency _wf5 test h10 h15 h30 h60 close
 ```
 
-Live inference: `btcmodel/predictor.py` (`Predictor.ingest(...)`, `Predictor.predict(epoch_second, p0)`).
+Live inference (`btcmodel/predictor.py`):
+
+```python
+from btcmodel.predictor import Predictor
+pred = Predictor(models={h: pickle.load(open(f"models_{h}_valid_wf5.pkl", "rb"))
+                         for h in ["h10", "h15", "h30", "h60", "close"]},
+                 season=pickle.load(open("season.pkl", "rb")))
+pred.ingest(arrays, t0_epoch)        # >= 9 days of 1s spot klines + perp 1s bars, hour-aligned start
+out = pred.predict(now_epoch_second, p0=window_open_price)
+out["heads"]["close"]["p_above_ref"]          # P(5m close >= P0)
+out["heads"]["h30"]["quantiles_usd"]          # price distribution 30 s ahead, in $
+out["heads"]["close"]["touch"]["+10bps"]      # P(trade at >= P0*1.001 before the close)
+out["heads"]["close"]["first_passage"]["+/-10bps"]   # up-first / down-first / neither
+```
+
+## 9. Repository map
+
+| path | content |
+|---|---|
+| `btcmodel/data.py`, `timeline.py` | download, checksum, compaction, continuous 1s timeline |
+| `btcmodel/features.py` | causal features, reference-relative targets, window path stats |
+| `btcmodel/regime.py` | online regime-state features (incl. close pressure) |
+| `btcmodel/models.py` | head model: scale, no-move atom, drift, residual law, calibration |
+| `btcmodel/events.py` | touch and first-passage layers |
+| `btcmodel/prob.py` | Brownian barrier formulas, scoring rules, day-block bootstrap |
+| `btcmodel/predictor.py` | live inference |
+| `research/` | the studies behind every design decision (2025/validation data only) |
+| `scripts/` | training, frozen evaluation, walk-forward, robustness, regime analysis, figures |
+| `artifacts/` | results (JSON/text), tables, figures, pre-registration |
+| `tests/` | lookahead tests, live-vs-batch consistency |
