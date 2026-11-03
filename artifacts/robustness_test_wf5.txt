@@ -1,0 +1,100 @@
+
+##### h10 (test_wf5) #####
+month-by-month log-loss skill vs naive Gaussian:
+  month      n  LL_naive  LL_model  skill_%  skill_direct_%  ECE_model
+2026-05 509760    0.2068    0.1661  19.7124         19.4741     0.0022
+2026-06 509760    0.2076    0.1830  11.8409         11.5158     0.0011
+2026-07 526752    0.2134    0.1737  18.5890         18.3921     0.0014
+2026-08 526752    0.2306    0.1790  22.3595         22.2423     0.0033
+2026-09 509760    0.2250    0.1828  18.7801         18.6001     0.0024
+2026-10 526752    0.2175    0.1759  19.0957         18.9294     0.0022
+2026-11  33984    0.2192    0.1680  23.3585         23.3280     0.0040
+months with positive skill: 7/7
+uncertain zone (0.2<p_naive<0.8, 20.4% of rows): LL naive=0.6055 model=0.4993 skill=17.54%  dLL=-0.10620 CI[-0.11759,-0.09502]
+e=0 (start of window): AUC model=0.6583 direct=0.6615; LL naive=0.69315 model=0.64530 (skill 6.90%); Brier model=0.22726
+    e=0 dLL model-naive=-0.04785 CI[-0.05304,-0.04306]
+model p in [0.0,0.02): n=879703, mean p=0.0042, observed=0.0047
+model p in [0.02,0.1): n=342187, mean p=0.0499, observed=0.0488
+model p in [0.9,0.98): n=388350, mean p=0.9502, observed=0.9501
+model p in [0.98,1.0): n=848681, mean p=0.9956, observed=0.9953
+directional AUC (sign of move from now): 0.6622
+
+##### h15 (test_wf5) #####
+month-by-month log-loss skill vs naive Gaussian:
+  month      n  LL_naive  LL_model  skill_%  skill_direct_%  ECE_model
+2026-05 501120    0.2464    0.2068  16.1030         15.8391     0.0024
+2026-06 501120    0.2497    0.2255   9.6800          9.3391     0.0015
+2026-07 517824    0.2539    0.2149  15.3470         15.0733     0.0021
+2026-08 517824    0.2697    0.2180  19.1806         19.0078     0.0033
+2026-09 501120    0.2677    0.2261  15.5342         15.3543     0.0037
+2026-10 517824    0.2576    0.2169  15.8158         15.6309     0.0035
+2026-11  33408    0.2596    0.2063  20.5549         20.5034     0.0045
+months with positive skill: 7/7
+uncertain zone (0.2<p_naive<0.8, 23.5% of rows): LL naive=0.6121 model=0.5318 skill=13.12%  dLL=-0.08028 CI[-0.09069,-0.07018]
+e=0 (start of window): AUC model=0.6408 direct=0.6439; LL naive=0.69315 model=0.65731 (skill 5.17%); Brier model=0.23280
+    e=0 dLL model-naive=-0.03583 CI[-0.04016,-0.03168]
+model p in [0.0,0.02): n=726921, mean p=0.0049, observed=0.0054
+model p in [0.02,0.1): n=375230, mean p=0.0509, observed=0.0502
+model p in [0.9,0.98): n=411126, mean p=0.9484, observed=0.9485
+model p in [0.98,1.0): n=695166, mean p=0.9950, observed=0.9945
+directional AUC (sign of move from now): 0.6496
+
+##### h30 (test_wf5) #####
+month-by-month log-loss skill vs naive Gaussian:
+  month      n  LL_naive  LL_model  skill_%  skill_direct_%  ECE_model
+2026-05 475200    0.3281    0.2928  10.7338         10.3830     0.0042
+2026-06 475200    0.3358    0.3121   7.0452          6.6965     0.0029
+2026-07 491040    0.3369    0.3019  10.3762         10.0989     0.0028
+2026-08 491040    0.3512    0.3017  14.0979         13.8680     0.0038
+2026-09 475200    0.3560    0.3167  11.0457         10.8393     0.0070
+2026-10 491040    0.3443    0.3043  11.6081         11.3357     0.0039
+2026-11  31680    0.3442    0.2953  14.2084         14.0192     0.0084
+months with positive skill: 7/7
+uncertain zone (0.2<p_naive<0.8, 30.8% of rows): LL naive=0.6261 model=0.5810 skill=7.20%  dLL=-0.04511 CI[-0.05294,-0.03793]
+e=0 (start of window): AUC model=0.6184 direct=0.6176; LL naive=0.69315 model=0.66890 (skill 3.50%); Brier model=0.23823
+    e=0 dLL model-naive=-0.02424 CI[-0.02795,-0.02067]
+model p in [0.0,0.02): n=441496, mean p=0.0066, observed=0.0073
+model p in [0.02,0.1): n=391807, mean p=0.0527, observed=0.0527
+model p in [0.9,0.98): n=396238, mean p=0.9456, observed=0.9453
+model p in [0.98,1.0): n=421779, mean p=0.9935, observed=0.9927
+directional AUC (sign of move from now): 0.6204
+
+##### h60 (test_wf5) #####
+month-by-month log-loss skill vs naive Gaussian:
+  month      n  LL_naive  LL_model  skill_%  skill_direct_%  ECE_model
+2026-05 423360    0.4255    0.3966   6.7933          6.4361     0.0072
+2026-06 423360    0.4366    0.4145   5.0611          4.7110     0.0045
+2026-07 437472    0.4370    0.4069   6.8893          6.5736     0.0035
+2026-08 437472    0.4482    0.4061   9.3945          9.1837     0.0046
+2026-09 423360    0.4598    0.4236   7.8685          7.6625     0.0099
+2026-10 437472    0.4456    0.4105   7.8776          7.5774     0.0046
+2026-11  28224    0.4440    0.4053   8.7253          8.3991     0.0129
+months with positive skill: 7/7
+uncertain zone (0.2<p_naive<0.8, 41.6% of rows): LL naive=0.6401 model=0.6175 skill=3.53%  dLL=-0.02257 CI[-0.02699,-0.01842]
+e=0 (start of window): AUC model=0.5884 direct=0.5874; LL naive=0.69315 model=0.68001 (skill 1.90%); Brier model=0.24354
+    e=0 dLL model-naive=-0.01314 CI[-0.01544,-0.01084]
+model p in [0.0,0.02): n=176975, mean p=0.0092, observed=0.0095
+model p in [0.02,0.1): n=317264, mean p=0.0557, observed=0.0550
+model p in [0.9,0.98): n=308744, mean p=0.9444, observed=0.9427
+model p in [0.98,1.0): n=169245, mean p=0.9907, observed=0.9912
+directional AUC (sign of move from now): 0.5886
+
+##### close (test_wf5) #####
+month-by-month log-loss skill vs naive Gaussian:
+  month      n  LL_naive  LL_model  skill_%  skill_direct_%  ECE_model
+2026-05 518400    0.5631    0.5034  10.5998         10.4833     0.0197
+2026-06 518400    0.5144    0.4820   6.3124          5.8970     0.0100
+2026-07 535680    0.5508    0.4994   9.3416          9.2674     0.0185
+2026-08 535680    0.5028    0.4695   6.6268          6.1523     0.0064
+2026-09 518400    0.5211    0.4862   6.6889          6.5309     0.0158
+2026-10 535680    0.5247    0.4822   8.0983          7.8391     0.0105
+2026-11  34560    0.4794    0.4548   5.1402          4.4066     0.0137
+months with positive skill: 7/7
+uncertain zone (0.2<p_naive<0.8, 50.6% of rows): LL naive=0.6613 model=0.6534 skill=1.20%  dLL=-0.00791 CI[-0.00914,-0.00683]
+e=0 (start of window): AUC model=0.5402 direct=0.5386; LL naive=0.69315 model=0.69065 (skill 0.36%); Brier model=0.24876
+    e=0 dLL model-naive=-0.00249 CI[-0.00322,-0.00181]
+model p in [0.0,0.02): n=188604, mean p=0.0081, observed=0.0131
+model p in [0.02,0.1): n=262380, mean p=0.0563, observed=0.0741
+model p in [0.9,0.98): n=250713, mean p=0.9433, observed=0.9332
+model p in [0.98,1.0): n=181522, mean p=0.9921, observed=0.9883
+directional AUC (sign of move from now): 0.5656

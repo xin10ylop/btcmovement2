@@ -14,7 +14,12 @@ For each head it outputs `P(S >= P0)`, quantiles of the target price in dollars,
 `P(touch P0·(1±k))` within the horizon, and first-passage probabilities
 (up-level first / down-level first / neither) for symmetric bands around P0.
 
-> RESULTS_PLACEHOLDER
+**Headline (untouched 6-month holdout, May-Nov 2026, regime-aware walk-forward model):**
+log-loss skill vs a naive Gaussian random walk of **18.6% / 15.4% / 10.9% / 7.4% / 8.0%** for
+the 10s / 15s / 30s / 60s / close heads, positive in every month and every market regime,
+calibrated (ECE ≤ 0.0125). Directional AUC 0.66 at 10 s decaying to 0.54 for the 5-minute
+direction at the open - an honest picture of where BTC is and is not predictable.
+See section 6.
 
 ---
 
@@ -149,7 +154,92 @@ optimistic inputs.
 * The directional (increment) AUC is reported separately; it is the pure measure of
   "which way next" skill, free of the trivially-known distance to the reference.
 
-> LADDER_PLACEHOLDER
+
+## 6. Results on the untouched holdout (2026-05-02 → 2026-11-02, 53,280 windows)
+
+Final model = **walk-forward, regime-aware** (trained through 2026-04-30, i.e. exactly what
+would have been deployed on 1 May 2026), scored once on six months it never saw.
+Log-loss of `P(S_target >= P0)` at every 5th second of every window; 95% CIs from a
+day-block bootstrap.
+
+| head | naive Gaussian | **final** | skill | ΔLL [95% CI] | ECE | directional AUC | drift R² |
+|---|---|---|---|---|---|---|---|
+| 10 s | 0.2169 | **0.1767** | **18.6%** | −0.0403 [−0.0438, −0.0369] | 0.0012 | **0.662** | 6.8% |
+| 15 s | 0.2576 | **0.2179** | **15.4%** | −0.0397 [−0.0432, −0.0364] | 0.0014 | 0.650 | 6.0% |
+| 30 s | 0.3421 | **0.3048** | **10.9%** | −0.0373 [−0.0405, −0.0344] | 0.0018 | 0.620 | 4.3% |
+| 60 s | 0.4422 | **0.4096** | **7.4%** | −0.0325 [−0.0348, −0.0303] | 0.0020 | 0.589 | 2.6% |
+| 5 m close | 0.5289 | **0.4867** | **8.0%** | −0.0422 [−0.0470, −0.0377] | 0.0125 | 0.566 | 1.7% |
+
+* **Consistency:** positive skill in **7 of 7 months for all five heads**, and significant in
+  every regime stratum (low/mid/high vol, weekday/weekend, US session, weak/strong trend,
+  rising vol, and the 5% most volatile days).
+* **Where the edge lives** (`artifacts/figures/skill_by_elapsed_test_wf5.png`): at the window
+  open the 5-minute direction is barely predictable (AUC 0.540, skill 0.36%), the 10 s
+  direction clearly is (AUC 0.658, skill 6.9%). Skill grows as the window unfolds and reaches
+  **~36% in the final 15 seconds** - that is where clock-aware volatility, the no-move atom,
+  fat tails and the close-pressure regime matter most.
+* **Magnitude:** the predicted expected absolute move beats the naive scale by ~7% in MSE
+  (Spearman with realized |move| 0.57 vs 0.54 on the close head). Pinball (quantile) skill vs
+  a naive Gaussian: 6.5% / 5.4% / 4.4% / 4.1% / 3.7% (10s → close). Close-head quantile
+  coverage is within 0.5 pp of nominal at every level (5.0/9.9/25.0/50.9/74.8/89.6/94.6%).
+  The 10 s / 15 s heads cover the tails correctly but *over*-cover the central levels
+  (10 s median: 56.8%) - not miscalibration but the no-move atom: when a quantile lands on
+  "price unchanged", `P(Y <= q)` jumps past the nominal level, as it must for a distribution
+  with a point mass (17% of 10-second intervals have no price change).
+* **Touch probabilities** (trading at `P0·(1±k)`, k = 5/10/20 bps, within the horizon):
+  15-32% log-loss skill vs the Brownian reflection formula across all heads and levels
+  (close head 15-26%), ECE ≤ 0.011.
+* **First passage** (±k band around P0: up first / down first / neither): 18-33% skill vs the
+  Brownian double-barrier formula (close head 18-26%).
+
+### What regime handling is worth (paired, identical holdout rows)
+
+Regime-blind model trained on 2025 only (frozen) vs the final regime-aware walk-forward model
+(`artifacts/compare_test_frozen_vs_wf5.txt`):
+
+| head | rows | regime-blind skill | regime-aware skill | ΔLL [95% CI] |
+|---|---|---|---|---|
+| close | all | 7.58% | **7.98%** | −0.0021 [−0.0027, −0.0015] |
+| close | last 60 s | 23.1% | **25.2%** | −0.0079 [−0.0100, −0.0059] |
+| close | last 30 s | 28.7% | **31.9%** | −0.0104 [−0.0132, −0.0076] |
+| 30 s | last 30 s | 21.0% | **24.8%** | −0.0140 [−0.0167, −0.0114] |
+| 60 s | last 60 s | 14.6% | **15.7%** | −0.0046 [−0.0055, −0.0037] |
+
+Better on every slice of every head, with gains concentrated 5-10x in the final seconds -
+exactly where the close-pressure regime acts. The mechanism found on validation data
+confirmed itself out of sample.
+
+### Online recalibration (causal, adopted per pre-registered rule 4)
+
+Each day a 2-parameter logistic map per elapsed-time bucket is refit on the previous 14 days
+of *already resolved* windows and applied to the next day (`scripts/regime_eval.py`).
+
+| head | ΔLL [95% CI] | ECE before → after | adopted |
+|---|---|---|---|
+| 10 s | −0.00015 [−0.00023, −0.00008] | 0.0012 → 0.0011 | yes |
+| 15 s | −0.00017 [−0.00027, −0.00008] | 0.0014 → 0.0011 | yes |
+| 30 s | −0.00015 [−0.00024, −0.00007] | 0.0018 → 0.0016 | yes |
+| 60 s | −0.00001 [−0.00013, +0.00010] | 0.0020 → 0.0019 | no (CI includes 0) |
+| close | −0.00098 [−0.00160, −0.00041] | **0.0125 → 0.0032** | yes |
+
+The regime-aware model needs about half the online repair the regime-blind one needed
+(close head: −0.0010 vs −0.0019), i.e. it already absorbs most of the drift itself.
+Regime-stratified skill (`artifacts/regime_test_wf5.txt`): significant in all 50
+head x stratum cells; even on the 5% most volatile days skill is 2.4-7.0%.
+
+### The ladder (close head, holdout) - what each idea contributes
+
+| rung | log-loss | ΔLL vs naive |
+|---|---|---|
+| naive Gaussian random walk, trailing 5-min vol | 0.5289 | — |
+| + clock-aware learned volatility | 0.5025 | −0.0264 |
+| + no-move atom & empirical fat-tailed law | 0.4913 | −0.0376 |
+| + drift (perp-led efficient-price gap, flows, stacking) | 0.4885 | −0.0404 |
+| + calibration from the structural prior | 0.4881 | −0.0408 |
+| direct GBM on all features (rival) | 0.4880 | −0.0409 |
+| **final: equal-weight logit blend (pre-registered)** | **0.4867** | **−0.0422** |
+
+Full tables for every head: `artifacts/tables_test_wf5.md`. Figures: `artifacts/figures/`.
 
 ## 7. Honest limitations
 
