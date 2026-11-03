@@ -16,6 +16,9 @@ recent past, so the models can condition on them instead of averaging over them:
   reg_trend_{4h,1d}      vol-standardized trend
   reg_basis_{1h,7d}      perp premium level (bps): positioning / funding regime
   reg_lvolume_1d_7d      activity regime
+  reg_cp{10,3}_{1d,7d}   close pressure: average move toward P0 in the final 10s/3s of recently
+                         completed windows (in sigma units) - lets the model scale the
+                         end-of-window "pull to the reference" by its current intensity
 """
 from __future__ import annotations
 
@@ -107,6 +110,33 @@ def regime_features(tl, T0_abs: np.ndarray, e: np.ndarray, chunk_days: int = 31,
         Rv = Roll(vol)
         F["reg_lvolume_1d_7d"] = (np.log(Rv.sum(c, DAY) / np.minimum(avail, DAY) + 1e-9)
                                   - np.log(Rv.sum(c, 7 * DAY) / np.minimum(avail, 7 * DAY) + 1e-9))
+        # close pressure: realized move TOWARD the window's own reference in the final k
+        # seconds of COMPLETED windows (a regime that appeared in Feb 2026; see
+        # research/eda5_close_pressure.py).  m_j = -sign(x) * R / (sigma*sqrt(k)) for windows
+        # whose price was within 1.5 sigma_k of P0 when the final k seconds started.
+        lo = np.log(np.asarray(tl["s_open"][a:b]))
+        nW = n // 300
+        Tj = np.arange(nW) * 300
+        ok = Tj >= 3600
+        volj = np.sqrt(np.maximum(R2.cs[Tj] - R2.cs[np.maximum(Tj - 3600, 0)], 0) / 3600)
+        volj = np.maximum(volj, np.median(volj[ok]) * 0.2 if ok.any() else 1e-6)
+        T0l = (T0s[sel] - a)
+        J = T0l // 300                              # current window index (local); use j < J
+        for k in (3, 10):
+            ia, ib = Tj + 300 - k - 1, Tj + 299
+            x = ls[ia] - lo[Tj]
+            R = ls[ib] - ls[ia]
+            sk = volj * np.sqrt(k)
+            near = ok & (np.abs(x) > 0) & (np.abs(x) < 1.5 * sk)
+            m = np.where(near, np.clip(-np.sign(x) * R / sk, -10, 10), 0.0)
+            cm = np.concatenate([[0.0], np.cumsum(m)])
+            cn = np.concatenate([[0.0], np.cumsum(near.astype(float))])
+            for NW, nm in [(288, "1d"), (2016, "7d")]:
+                if k == 3 and NW == 288:
+                    continue
+                lo_j = np.maximum(J - NW, 0)
+                num, den = cm[J] - cm[lo_j], cn[J] - cn[lo_j]
+                F[f"reg_cp{k}_{nm}"] = np.where(den >= 30, num / np.maximum(den, 1), np.nan)
         # insufficient history -> NaN (LightGBM routes missing values explicitly)
         short7 = avail < 7 * DAY
         for k in ["reg_lrv_7d", "reg_rv_1d_7d", "reg_basis_7d", "reg_lvolume_1d_7d"]:
@@ -121,4 +151,5 @@ def regime_features(tl, T0_abs: np.ndarray, e: np.ndarray, chunk_days: int = 31,
 
 REGIME_FEATS = ["reg_ll_beta_1h", "reg_ll_beta_6h", "reg_catchup_1h", "reg_catchup_6h", "reg_ac1_1h",
                 "reg_vr60_1h", "reg_vr300_1d", "reg_lrv_7d", "reg_rv_1d_7d", "reg_volvol_1d",
-                "reg_trend_4h", "reg_trend_1d", "reg_basis_1h", "reg_basis_7d", "reg_lvolume_1d_7d"]
+                "reg_trend_4h", "reg_trend_1d", "reg_basis_1h", "reg_basis_7d", "reg_lvolume_1d_7d",
+                "reg_cp10_1d", "reg_cp10_7d", "reg_cp3_7d"]

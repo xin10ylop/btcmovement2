@@ -19,7 +19,7 @@ def test():
             n = hi - lo
             def __init__(s):
                 s.d = {}
-                for k in ["s_close", "p_close", "s_volume", "p_buy", "p_sell"]:
+                for k in ["s_close", "s_open", "p_close", "s_volume", "p_buy", "p_sell"]:
                     x = np.array(tl[k][lo:hi], dtype=np.float64)
                     cut = T0 + e - lo
                     x[cut:] = x[cut:] * np.exp(rng.normal(0, 0.05, len(x) - cut))
