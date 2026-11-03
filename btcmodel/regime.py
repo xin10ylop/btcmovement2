@@ -119,7 +119,8 @@ def regime_features(tl, T0_abs: np.ndarray, e: np.ndarray, chunk_days: int = 31,
         Tj = np.arange(nW) * 300
         ok = Tj >= 3600
         volj = np.sqrt(np.maximum(R2.cs[Tj] - R2.cs[np.maximum(Tj - 3600, 0)], 0) / 3600)
-        volj = np.maximum(volj, np.median(volj[ok]) * 0.2 if ok.any() else 1e-6)
+        # fixed floor (a data-dependent floor over the chunk would peek at later windows)
+        volj = np.maximum(volj, 1.5e-5)
         T0l = (T0s[sel] - a)
         J = T0l // 300                              # current window index (local); use j < J
         for k in (3, 10):

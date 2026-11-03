@@ -36,7 +36,13 @@ def main(heads, end=None, tag=None):
     from btcmodel.regime import REGIME_FEATS
     from train_eval import USE_REGIME
     for head in heads:
-        d = pd.concat([load_head(s, head) for s in ("train", "valid", "test")], ignore_index=True)
+        from btcmodel.dataset import SPLITS
+        from datetime import date as _date
+        splits = [s for s in ("train", "valid", "test")
+                  if end is None or SPLITS[s][0] <= _date.fromisoformat(end)]
+        # note: the valid/test caches are sampled every 5 s vs 10 s for train, so the most
+        # recent regime gets ~2x the weight of 2025 - a deliberate recency tilt.
+        d = pd.concat([load_head(s, head) for s in splits], ignore_index=True)
         if end is not None:
             end_day = int((np.datetime64(end) - np.datetime64("2025-01-01")) / np.timedelta64(1, "D"))
             d = d[d["day"].values <= end_day].reset_index(drop=True)

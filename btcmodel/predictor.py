@@ -29,7 +29,7 @@ DIRECT_FEATS = sorted(set(VOL_FEATS + DIR_FEATS + ["lH", "z_naive", "lproj_300",
 from .events import TOUCH_LEVELS, FP_LEVELS, TOUCH_FEATS, FP_FEATS
 from .prob import p_touch, p_double_barrier
 
-HEAD_H = {"h30": 30, "h60": 60, "close": None}
+HEAD_H = {"h10": 10, "h15": 15, "h30": 30, "h60": 60, "close": None}   # order matters (stacking)
 QLEVELS = (0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95)
 
 
@@ -113,7 +113,7 @@ class Predictor:
             d = X.copy()
             d[f"{head}__H"] = np.int16(H)
             d[f"{head}__sint"] = self.season.integrated(np.array([T0 + e]), np.array([H]), base.how_hour).astype(np.float32)
-            for sh in ("h30", "h60"):
+            for sh in HEAD_H:
                 if f"mu_{sh}_px" in self.models[head]["head"].extra:
                     sub = out["heads"].get(sh)
                     d[f"mu_{sh}_px"] = np.float32(np.nan if sub is None else sub["_drift_px"])

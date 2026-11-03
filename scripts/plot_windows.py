@@ -15,12 +15,13 @@ sys.path.insert(0, ROOT)
 from btcmodel.timeline import load_timeline  # noqa: E402
 
 SPLIT = sys.argv[1] if len(sys.argv) > 1 else "test"
+TAG = sys.argv[2] if len(sys.argv) > 2 else ""
 FIG = os.path.join(ROOT, "artifacts", "figures")
 os.makedirs(FIG, exist_ok=True)
 
 
 def main(n=4, seed=3):
-    P = pickle.load(open(f"/home/user/data/models/preds_close_{SPLIT}.pkl", "rb"))
+    P = pickle.load(open(f"/home/user/data/models/preds_close_{SPLIT}{TAG}.pkl", "rb"))
     tl = load_timeline()
     sc = np.asarray(tl["s_close"])
     rng = np.random.default_rng(seed)
@@ -57,8 +58,8 @@ def main(n=4, seed=3):
             ax.legend(h1 + h2, l1 + l2, fontsize=7, loc="upper left")
     axs[-1].set_xlabel("elapsed seconds")
     fig.tight_layout()
-    fig.savefig(os.path.join(FIG, f"windows_{SPLIT}.png"), dpi=130)
-    print("saved", os.path.join(FIG, f"windows_{SPLIT}.png"))
+    fig.savefig(os.path.join(FIG, f"windows_{SPLIT}{TAG}.png"), dpi=130)
+    print("saved", os.path.join(FIG, f"windows_{SPLIT}{TAG}.png"))
 
 
 if __name__ == "__main__":

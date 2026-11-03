@@ -67,7 +67,7 @@ def main():
     except Exception:
         pass
     trq = pd.read_parquet(os.path.join(CACHE, "train.parquet"), columns=["lrv_86400"])["lrv_86400"].quantile([1 / 3, 2 / 3]).values
-    for head in ["h30", "h60", "close"]:
+    for head in ["h10", "h15", "h30", "h60", "close"]:
         f = os.path.join(MD, f"preds_{head}_{SPLIT}{TAG}.pkl")
         if not os.path.exists(f):
             continue

@@ -17,7 +17,7 @@ NAMES = {"B0_naive": "naive Gaussian random walk (trailing vol)", "B1_volmodel":
 
 def main():
     out = []
-    for head, title in [("h30", "30 s"), ("h60", "60 s"), ("close", "5-minute close")]:
+    for head, title in [("h10", "10 s"), ("h15", "15 s"), ("h30", "30 s"), ("h60", "60 s"), ("close", "5-minute close")]:
         f = os.path.join(ROOT, "artifacts", f"results_{head}_{SPLIT}{TAG}.json")
         if not os.path.exists(f):
             continue

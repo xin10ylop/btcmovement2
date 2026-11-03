@@ -34,7 +34,8 @@ MODEL_DIR = "/home/user/data/models"
 os.makedirs(OUT, exist_ok=True)
 os.makedirs(MODEL_DIR, exist_ok=True)
 EVAL = sys.argv[1] if len(sys.argv) > 1 else "valid"
-HEAD_ORDER = ["h30", "h60", "close"]
+HEAD_ORDER = ["h10", "h15", "h30", "h60", "close"]   # shorter heads feed longer ones (stacking)
+EXTRA_TARGET_HEADS = ("h10", "h15")                  # targets live in <split>_targets_extra.parquet
 ONLY = sys.argv[2] if len(sys.argv) > 2 else None
 USE_REGIME = os.environ.get("BTC_REGIME", "0") == "1"     # opt-in regime-state features
 TAG = os.environ.get("BTC_TAG", "")                       # version suffix for outputs
@@ -61,6 +62,11 @@ def load_head(split, head):
     feats = [c for c in allc if "__" not in c and c not in META]
     tcols = [c for c in allc if c.startswith(head + "__")]
     d = pd.read_parquet(os.path.join(CACHE, f"{split}.parquet"), columns=feats + tcols + META)
+    if head in EXTRA_TARGET_HEADS:
+        x = pd.read_parquet(os.path.join(CACHE, f"{split}_targets_extra.parquet"))
+        x = x[[c for c in x.columns if c.startswith(head + "__")]]
+        assert len(x) == len(d)
+        d = pd.concat([d, x], axis=1)
     if USE_REGIME:
         r = pd.read_parquet(os.path.join(CACHE, f"{split}_regime.parquet"))
         assert len(r) == len(d)

@@ -16,13 +16,14 @@ sys.path.insert(0, ROOT)
 from btcmodel.prob import logloss, brier, ece, auc, block_bootstrap_diff  # noqa: E402
 
 SPLIT = sys.argv[1] if len(sys.argv) > 1 else "valid"
+TAG = sys.argv[2] if len(sys.argv) > 2 else ""
 T0_DATE = np.datetime64("2025-01-01")
 
 
 def main():
     out = []
-    for head in ["h30", "h60", "close"]:
-        f = f"/home/user/data/models/preds_{head}_{SPLIT}.pkl"
+    for head in ["h10", "h15", "h30", "h60", "close"]:
+        f = f"/home/user/data/models/preds_{head}_{SPLIT}{TAG}.pkl"
         if not os.path.exists(f):
             continue
         P = pickle.load(open(f, "rb"))
@@ -30,7 +31,7 @@ def main():
         p0, pd_ = P["p"]["B0_naive"], P["p"]["D_directGBM"]
         pm = P["p"].get("E_blend", P["p"]["M_final"])   # final forecast
         l0, lm, ld = logloss(y, p0), logloss(y, pm), logloss(y, pd_)
-        out.append(f"\n##### {head} ({SPLIT}) #####")
+        out.append(f"\n##### {head} ({SPLIT}{TAG}) #####")
         # 1. month by month
         month = (T0_DATE + day.astype("timedelta64[D]")).astype("datetime64[M]")
         rows = []
@@ -68,7 +69,7 @@ def main():
         out.append(f"directional AUC (sign of move from now): {auc((inc[nz] > 0).astype(int), mu[nz]):.4f}")
     s = "\n".join(out)
     print(s)
-    with open(os.path.join(ROOT, "artifacts", f"robustness_{SPLIT}.txt"), "w") as fh:
+    with open(os.path.join(ROOT, "artifacts", f"robustness_{SPLIT}{TAG}.txt"), "w") as fh:
         fh.write(s)
 
 

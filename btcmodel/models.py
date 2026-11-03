@@ -171,6 +171,7 @@ class HeadModel:
         self.regime = regime_feats or []
         self.seed = seed
         edges = np.array([1, 11, 31, 61, 121, 201, 301]) if head == "close" else np.array([0, 10 ** 6])
+        # (fixed-horizon heads h10/h15/h30/h60 use a single residual-law bucket)
         self.dist = EmpiricalDist(edges)
 
     # ------------------------------------------------------------------ helpers
