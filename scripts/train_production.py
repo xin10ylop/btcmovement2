@@ -32,7 +32,7 @@ from btcmodel.events import touch_rows, TouchModel, fp_rows, FirstPassageModel  
 ES_DAYS = 30
 
 
-def main(heads, end=None, tag=None):
+def main(heads, end=None, tag=None, old_thin=1):
     from btcmodel.regime import REGIME_FEATS
     from train_eval import USE_REGIME
     for head in heads:
@@ -43,6 +43,11 @@ def main(heads, end=None, tag=None):
         # note: the valid/test caches are sampled every 5 s vs 10 s for train, so the most
         # recent regime gets ~2x the weight of 2025 - a deliberate recency tilt.
         d = pd.concat([load_head(s, head) for s in splits], ignore_index=True)
+        if old_thin > 1:
+            # thin the pre-2026 regime by whole windows: recency tilt + memory headroom
+            old = d["day"].values < 365
+            keep = ~old | ((d["T0"].values // 300) % old_thin == 0)
+            d = d[keep].reset_index(drop=True)
         if end is not None:
             end_day = int((np.datetime64(end) - np.datetime64("2025-01-01")) / np.timedelta64(1, "D"))
             d = d[d["day"].values <= end_day].reset_index(drop=True)
@@ -85,5 +90,6 @@ if __name__ == "__main__":
     ap.add_argument("heads", nargs="*", default=HEAD_ORDER)
     ap.add_argument("--end", default=None)
     ap.add_argument("--tag", default=None)
+    ap.add_argument("--old-thin", type=int, default=1, help="keep 1/N of 2025 windows")
     a = ap.parse_args()
-    main(a.heads, a.end, a.tag)
+    main(a.heads, a.end, a.tag, a.old_thin)

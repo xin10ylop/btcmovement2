@@ -276,20 +276,29 @@ python -m tests.test_regime_no_lookahead
 python -m tests.test_predictor_consistency _wf5 test h10 h15 h30 h60 close
 ```
 
-Live inference (`btcmodel/predictor.py`):
+Live inference (`btcmodel/predictor.py`) with the packaged, holdout-evaluated models
+(`models/wf5_20260430/`, trained through 2026-04-30, 31 MB):
 
 ```python
 from btcmodel.predictor import Predictor
-pred = Predictor(models={h: pickle.load(open(f"models_{h}_valid_wf5.pkl", "rb"))
-                         for h in ["h10", "h15", "h30", "h60", "close"]},
-                 season=pickle.load(open("season.pkl", "rb")))
-pred.ingest(arrays, t0_epoch)        # >= 9 days of 1s spot klines + perp 1s bars, hour-aligned start
+from btcmodel.recalibration import OnlineRecalibrator
+
+rc = OnlineRecalibrator()                       # optional, adopted for 10s/15s/30s/close
+pred = Predictor.load_dir("models/wf5_20260430", recalibrator=rc)
+pred.ingest(arrays, t0_epoch)   # >= 9 days of 1s spot klines + perp 1s bars (fields as in
+                                # btcmodel/timeline.FIELDS), buffer starting on an hour boundary
 out = pred.predict(now_epoch_second, p0=window_open_price)
-out["heads"]["close"]["p_above_ref"]          # P(5m close >= P0)
-out["heads"]["h30"]["quantiles_usd"]          # price distribution 30 s ahead, in $
-out["heads"]["close"]["touch"]["+10bps"]      # P(trade at >= P0*1.001 before the close)
-out["heads"]["close"]["first_passage"]["+/-10bps"]   # up-first / down-first / neither
+out["heads"]["close"]["p_above_ref"]                  # P(5m close >= P0)
+out["heads"]["h10"]["p_above_ref"]                    # P(price in 10 s >= P0)
+out["heads"]["h30"]["quantiles_usd"]                  # price distribution 30 s ahead, in $
+out["heads"]["close"]["touch"]["+10bps"]              # P(trade at >= P0*1.001 before the close)
+out["heads"]["close"]["first_passage"]["+/-10bps"]    # up-first / down-first / neither
+# once outcomes are known:  rc.add(head, e, p_blend, y, day);  once a day:  rc.refit(today)
 ```
+
+`python scripts/demo_live.py` replays a holdout window second by second through this exact
+interface (it only ever sees data up to the decision second). For trading tomorrow, refit on
+everything first: `BTC_REGIME=1 python scripts/train_production.py --old-thin 2`.
 
 ## 9. Repository map
 
@@ -301,7 +310,9 @@ out["heads"]["close"]["first_passage"]["+/-10bps"]   # up-first / down-first / n
 | `btcmodel/models.py` | head model: scale, no-move atom, drift, residual law, calibration |
 | `btcmodel/events.py` | touch and first-passage layers |
 | `btcmodel/prob.py` | Brownian barrier formulas, scoring rules, day-block bootstrap |
-| `btcmodel/predictor.py` | live inference |
+| `btcmodel/predictor.py` | live inference (`Predictor.load_dir`) |
+| `btcmodel/recalibration.py` | causal online recalibrator |
+| `models/wf5_20260430/` | packaged final models (holdout-evaluated) + clock seasonality |
 | `research/` | the studies behind every design decision (2025/validation data only) |
 | `scripts/` | training, frozen evaluation, walk-forward, robustness, regime analysis, figures |
 | `artifacts/` | results (JSON/text), tables, figures, pre-registration |

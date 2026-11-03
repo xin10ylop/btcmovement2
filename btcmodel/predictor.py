@@ -47,10 +47,26 @@ class _Buffer:
 
 
 class Predictor:
-    def __init__(self, models: dict, season):
+    def __init__(self, models: dict, season, recalibrator=None):
         self.models = models
         self.season = season
+        self.recal = recalibrator          # optional btcmodel.recalibration.OnlineRecalibrator
         self.buf = None
+
+    @staticmethod
+    def load_dir(path: str, recalibrator=None):
+        """Load packaged models (e.g. models/wf5_20260430/{h10,h15,h30,h60,close}.pkl.gz)."""
+        import gzip
+        import os
+        models = {}
+        for h in HEAD_H:
+            f = os.path.join(path, f"{h}.pkl.gz")
+            if os.path.exists(f):
+                with gzip.open(f, "rb") as fh:
+                    models[h] = pickle.load(fh)
+        with open(os.path.join(path, "season.pkl"), "rb") as fh:
+            season = pickle.load(fh)
+        return Predictor(models, season, recalibrator)
 
     @staticmethod
     def load(path: str, season_path: str):
@@ -128,8 +144,11 @@ class Predictor:
             dfe = sorted(set(DIRECT_FEATS + list(getattr(hm, "regime", []))))
             p_d = float(dm.predict(d[dfe], num_iteration=dm.best_iteration)[0])
             p_m, p_d = min(max(p_m, 1e-5), 1 - 1e-5), min(max(p_d, 1e-5), 1 - 1e-5)
+            p_blend = float(expit(0.5 * logit(p_m) + 0.5 * logit(p_d)))
+            p_final = p_blend if self.recal is None else float(self.recal.apply(head, e, p_blend))
             r = {"horizon_s": int(H),
-                 "p_above_ref": float(expit(0.5 * logit(p_m) + 0.5 * logit(p_d))),
+                 "p_above_ref": p_final,              # final forecast (recalibrated if enabled)
+                 "p_above_ref_blend": p_blend,        # pre-registered blend, before recalibration
                  "p_above_ref_structured": p_m, "p_above_ref_direct": p_d}
             q = hm.quantiles(d, np.array(QLEVELS))[0]
             r["quantiles_usd"] = {str(a): float(p0 * np.exp(v)) for a, v in zip(QLEVELS, q)}

@@ -31,8 +31,8 @@ def run(split="valid", heads=("h30",), n=6, seed=0, tag="", model_split="valid",
                 continue
             batch = Ph["p"]["E_blend"][j[0]] if "E_blend" in Ph["p"] else None
             if batch is not None:
-                worst = max(worst, abs(batch - out["heads"][h]["p_above_ref"]))
-            live = out["heads"][h]["p_above_ref"]
+                worst = max(worst, abs(batch - out["heads"][h]["p_above_ref_blend"]))
+            live = out["heads"][h]["p_above_ref_blend"]
             bm, lm = Ph["p"]["M_final"][j[0]], out["heads"][h]["p_above_ref_structured"]
             print(f"{h} T0={T0} e={e}: batch structured={bm:.6f} live structured={lm:.6f}"
                   + (f" | batch blend={batch:.6f} live blend={live:.6f}" if batch is not None else ""))

@@ -137,6 +137,18 @@ class EmpiricalDist:
         self.sorted = [np.sort(eps[b == j]) for j in range(len(self.edges) - 1)]
         return self
 
+    # tail-refined probability grid for the compact representation
+    GRID = np.unique(np.concatenate([[0.0], np.geomspace(1e-7, 1e-3, 120), np.linspace(1e-3, 1 - 1e-3, 4001),
+                                     1 - np.geomspace(1e-3, 1e-7, 120), [1.0]]))
+
+    def compact(self):
+        """Replace the full sorted residual arrays by quantiles on a tail-refined grid
+        (exact to ~1e-7 in probability in the tails; ~100x smaller)."""
+        if getattr(self, "sorted", None) is not None:
+            self.gq = np.stack([np.quantile(s, self.GRID, method="inverted_cdf") for s in self.sorted])
+            self.sorted = None
+        return self
+
     def sf(self, z, H):
         """P(eps >= z) (inclusive, so that ties count as 'up')."""
         b = self.bucket(H)
@@ -144,8 +156,14 @@ class EmpiricalDist:
         for j in range(len(self.edges) - 1):
             m = b == j
             if m.any():
-                s = self.sorted[j]
-                out[m] = 1.0 - np.searchsorted(s, z[m], side="left") / len(s)
+                if getattr(self, "sorted", None) is not None:
+                    s = self.sorted[j]
+                    out[m] = 1.0 - np.searchsorted(s, z[m], side="left") / len(s)
+                else:
+                    q = self.gq[j]
+                    # F(z-) via the left-continuous inverse of the quantile grid
+                    k = np.searchsorted(q, z[m], side="left")
+                    out[m] = 1.0 - self.GRID[np.clip(k - 1, 0, len(self.GRID) - 1)] * (k > 0)
         return out
 
     def ppf(self, a, H):
