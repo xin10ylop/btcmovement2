@@ -67,9 +67,24 @@ All research in `research/` uses 2025 data only.
    perp-spot basis deviation predicts spot's next move. The best estimate of the "efficient
    price" is not the last spot trade - so there is genuine short-horizon drift, and it
    saturates with horizon (it is a gap that closes), which is why it can be shared across heads.
-4. **Fat tails and ties.** Increments are heavily fat-tailed relative to trailing vol; in
-   quiet regimes the price often does not move at all (7.5% of 30s increments in 2025 were
-   exactly zero), which matters because ties resolve "up".
+4. **Fat tails and a "no-move" atom.** Increments are heavily fat-tailed relative to
+   trailing vol, and the price frequently does not move at all: with 1 s left in the window
+   there is a 48% chance the price is unchanged (24% with 6-10 s left, 7.5% over any 30 s),
+   and in quiet regimes ~3x more often than in active ones. Because ties resolve "up", this
+   atom is first-order for `P(close >= P0)` at the end of the window - a Gaussian with a
+   *good* volatility estimate is worse than the naive model there.
+5. **The market's mechanics drift, not just its volatility.** Monthly averages of online
+   microstructure estimates (`research`/`btcmodel/regime.py`):
+
+   | period | perp->spot lead-lag beta | spot 1s autocorr. | 5m variance ratio | ann. vol |
+   |---|---|---|---|---|
+   | 2025 (train) | 0.16-0.19 | 0.10-0.15 | 1.41-1.86 | 20-48% |
+   | Jan-Apr 2026 (valid) | 0.13-0.15 | 0.085-0.10 | 1.29-1.49 | 29-57% |
+   | May-Nov 2026 (test) | 0.12-0.15 | 0.10-0.12 | 1.56-1.77 | 24-38% |
+
+   Spot became structurally more efficient (it lags the perp less), so the main directional
+   signal is weaker in 2026 than in the training year. A regime-blind model would keep
+   trusting the 2025 strength of that signal.
 
 ## 4. Model
 
@@ -95,7 +110,20 @@ Each head models `R = sigma * (mu + eps)`:
   returns, window path statistics, multi-timeframe candle opens. The close head also
   receives the 30s/60s heads' drift (*cross-horizon stacking*: the gap is learned where its
   signal-to-noise ratio is highest and transferred to the long horizon).
-* **residual law `eps`** - empirical, fat-tailed, bucketed by horizon length.
+* **no-move atom `pi0`** - LightGBM `P(R = 0 | state)`. The continuous part lives on
+  `R != 0` with scale `sigma_c = sigma/(1-pi0)`; by the identity
+  `E[R/sigma_c | R != 0] = E[R]/sigma = mu` the drift carries over unchanged, and
+  `P(S_T >= P0) = pi0*1{x >= 0} + (1-pi0)*P_c(R >= -x)`. Quantiles are those of the
+  atom + continuous mixture.
+* **residual law `eps`** - empirical, fat-tailed, fitted on non-zero moves, bucketed by
+  horizon length.
+* **regime state** (`btcmodel/regime.py`) - online, causal estimates of the market's
+  current mechanics: lead-lag beta and the realized *catch-up coefficient* of spot to the
+  basis gap (how strong the main drift signal is right now), 1s autocorrelation, variance
+  ratios (trending vs mean-reverting), 7-day vol and the 1d/7d vol ratio, vol-of-vol,
+  vol-standardized 4h/1d trend, perp premium level, activity regime. They enter the scale,
+  atom, drift, calibration and direct models, so that the models condition on the regime
+  instead of averaging over it.
 * **calibration from the prior** - a small LightGBM whose `init_score` is the structural
   logit; it can only move away from the structural answer when that lowers out-of-sample
   loss (early stopping on the validation set).

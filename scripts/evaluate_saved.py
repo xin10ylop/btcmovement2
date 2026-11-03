@@ -23,7 +23,7 @@ from scipy.stats import norm
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 sys.path.insert(0, os.path.join(ROOT, "scripts"))
-from train_eval import load_head, summarize, STACK_DIR, MODEL_DIR, OUT, HEAD_ORDER  # noqa: E402
+from train_eval import load_head, summarize, STACK_DIR, MODEL_DIR, OUT, HEAD_ORDER, TAG  # noqa: E402
 from btcmodel.models import VOL_FEATS, DIR_FEATS, SQ2PI  # noqa: E402
 from btcmodel.events import touch_rows, naive_touch, fp_rows  # noqa: E402
 from btcmodel.prob import logloss, brier, ece, auc, block_bootstrap_diff, mlogloss  # noqa: E402
@@ -41,19 +41,19 @@ def log(*a):
 
 def main():
     t0 = time.time()
-    M = pickle.load(open(os.path.join(MODEL_DIR, f"models_{HEAD}_valid.pkl"), "rb"))
+    M = pickle.load(open(os.path.join(MODEL_DIR, f"models_{HEAD}_valid{TAG}.pkl"), "rb"))
     hm, tm, fm, dm = M["head"], M["touch"], M["fp"], M["direct"]
     ev = load_head(SPLIT, HEAD)
     log(f"=========== HEAD {HEAD} on {SPLIT} (frozen models) ===========  rows={len(ev)} windows={ev['T0'].nunique()}")
     for sh in hm.extra:
         short = sh.split("_")[1]
-        s = pd.read_parquet(os.path.join(STACK_DIR, f"{short}_{SPLIT}_{SPLIT}.parquet"))
+        s = pd.read_parquet(os.path.join(STACK_DIR, f"{short}_{SPLIT}_{SPLIT}{TAG}.parquet"))
         ev[sh] = pd.merge(ev[["T0", "e"]], s, on=["T0", "e"], how="left")["drift_px"].values
         ev[sh] = (ev[sh] / ev["naive_scale"]).astype(np.float32)
     hm.prepare(ev)
     pd.DataFrame({"T0": ev["T0"].values, "e": ev["e"].values,
                   "drift_px": ev["mu"].values * ev["sig"].values}).to_parquet(
-        os.path.join(STACK_DIR, f"{HEAD}_{SPLIT}_{SPLIT}.parquet"))
+        os.path.join(STACK_DIR, f"{HEAD}_{SPLIT}_{SPLIT}{TAG}.parquet"))
 
     y = (ev[f"{HEAD}__y"].values >= 0).astype(int)
     H = ev[f"{HEAD}__H"].values.astype(float)
@@ -65,7 +65,7 @@ def main():
     p["B2_fattail"] = np.clip(hm.struct_up(ev, use_drift=False), 1e-5, 1 - 1e-5)
     p["B3_struct"] = ev["p_struct"].values
     p["M_final"] = np.clip(hm.p_up(ev), 1e-5, 1 - 1e-5)
-    feats = sorted(set(VOL_FEATS + DIR_FEATS + ["lH", "z_naive", "lproj_300", "lsint"]))
+    feats = sorted(set(VOL_FEATS + DIR_FEATS + ["lH", "z_naive", "lproj_300", "lsint"] + list(getattr(hm, "regime", []))))
     p["D_directGBM"] = np.clip(dm.predict(ev[feats], num_iteration=dm.best_iteration), 1e-5, 1 - 1e-5)
     p["E_blend"] = expit(0.5 * logit(p["M_final"]) + 0.5 * logit(p["D_directGBM"]))
     res = [summarize(k, y, pk, g, ref=p["B0_naive"] if k != "B0_naive" else None) for k, pk in p.items()]
@@ -153,7 +153,7 @@ def main():
     log(ft.to_string(index=False))
     out["first_passage"] = fr
 
-    tag = f"{HEAD}_{SPLIT}"
+    tag = f"{HEAD}_{SPLIT}{TAG}"
     json.dump(out, open(os.path.join(OUT, f"results_{tag}.json"), "w"), indent=1, default=float)
     open(os.path.join(OUT, f"log_{tag}.txt"), "w").write("\n".join(LOG))
     pickle.dump({"y": y, "e": ev["e"].values, "day": g, "T0": ev["T0"].values, "p": p, "mu": ev["mu"].values,

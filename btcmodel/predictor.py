@@ -94,6 +94,11 @@ class Predictor:
         base = Base(src, 0, T0 + W)
         fe = FeatureEngine(base, self.season)
         X, aux = fe.compute(np.array([T0]), np.array([e]))
+        if any(getattr(m["head"], "regime", []) for m in self.models.values()):
+            from .regime import regime_features
+            R = regime_features(src, np.array([T0]), np.array([e]))
+            for k in R.columns:
+                X[k] = R[k].values
         X["xcur"] = aux["cur"] - aux["p0"]
         X["v"] = aux["v"].astype(np.float32)
         p0 = float(np.exp(aux["p0"][0]))
@@ -120,7 +125,8 @@ class Predictor:
             hm.prepare(d)
             p_m = float(hm.p_up(d)[0])
             dm = self.models[head]["direct"]
-            p_d = float(dm.predict(d[DIRECT_FEATS], num_iteration=dm.best_iteration)[0])
+            dfe = sorted(set(DIRECT_FEATS + list(getattr(hm, "regime", []))))
+            p_d = float(dm.predict(d[dfe], num_iteration=dm.best_iteration)[0])
             p_m, p_d = min(max(p_m, 1e-5), 1 - 1e-5), min(max(p_d, 1e-5), 1 - 1e-5)
             r = {"horizon_s": int(H),
                  "p_above_ref": float(expit(0.5 * logit(p_m) + 0.5 * logit(p_d))),

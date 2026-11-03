@@ -36,6 +36,8 @@ os.makedirs(MODEL_DIR, exist_ok=True)
 EVAL = sys.argv[1] if len(sys.argv) > 1 else "valid"
 HEAD_ORDER = ["h30", "h60", "close"]
 ONLY = sys.argv[2] if len(sys.argv) > 2 else None
+USE_REGIME = os.environ.get("BTC_REGIME", "0") == "1"     # opt-in regime-state features
+TAG = os.environ.get("BTC_TAG", "")                       # version suffix for outputs
 STACK_DIR = "/home/user/data/stack"
 os.makedirs(STACK_DIR, exist_ok=True)
 LOG = []
@@ -59,6 +61,10 @@ def load_head(split, head):
     feats = [c for c in allc if "__" not in c and c not in META]
     tcols = [c for c in allc if c.startswith(head + "__")]
     d = pd.read_parquet(os.path.join(CACHE, f"{split}.parquet"), columns=feats + tcols + META)
+    if USE_REGIME:
+        r = pd.read_parquet(os.path.join(CACHE, f"{split}_regime.parquet"))
+        assert len(r) == len(d)
+        d = pd.concat([d, r], axis=1)
     d = d[d[f"{head}__valid"].values].reset_index(drop=True)
     for c in feats:
         if d[c].dtype == np.float64:
@@ -89,12 +95,14 @@ def main():
         extra = []
         for sh in [h for h in HEAD_ORDER if HEAD_ORDER.index(h) < HEAD_ORDER.index(head)]:
             for d, key in ((tr, "train"), (va, "valid"), (ev, EVAL)):
-                s = pd.read_parquet(os.path.join(STACK_DIR, f"{sh}_{key}_{EVAL}.parquet"))
+                s = pd.read_parquet(os.path.join(STACK_DIR, f"{sh}_{key}_{EVAL}{TAG}.parquet"))
                 # merge on (T0, e); rows of the short head are a subset of e-values
                 d[f"mu_{sh}_px"] = pd.merge(d[["T0", "e"]], s, on=["T0", "e"], how="left")["drift_px"].values
                 d[f"mu_{sh}_px"] = (d[f"mu_{sh}_px"] / d["naive_scale"]).astype(np.float32)
             extra.append(f"mu_{sh}_px")
-        hm = HeadModel(head, extra_dir_feats=extra).fit(tr, va, log=log)
+        from btcmodel.regime import REGIME_FEATS
+        hm = HeadModel(head, extra_dir_feats=extra,
+                       regime_feats=REGIME_FEATS if USE_REGIME else None).fit(tr, va, log=log)
         if ev is not va:
             hm.prepare(ev)
         models[head] = hm
@@ -102,7 +110,7 @@ def main():
         for d, key in ((tr, "train"), (va, "valid"), (ev, EVAL)):
             pd.DataFrame({"T0": d["T0"].values, "e": d["e"].values,
                           "drift_px": d["mu"].values * d["sig"].values}).to_parquet(
-                os.path.join(STACK_DIR, f"{head}_{key}_{EVAL}.parquet"))
+                os.path.join(STACK_DIR, f"{head}_{key}_{EVAL}{TAG}.parquet"))
 
         # ------------------------------------------------ P(up) ladder
         y = (ev[f"{head}__y"].values >= 0).astype(int)
@@ -117,7 +125,8 @@ def main():
         p["B3_struct"] = ev["p_struct"].values
         p["M_final"] = hm.p_up(ev)
         # direct GBM rival
-        feats = sorted(set(VOL_FEATS + DIR_FEATS + ["lH", "z_naive", "lproj_300", "lsint"]))
+        feats = sorted(set(VOL_FEATS + DIR_FEATS + ["lH", "z_naive", "lproj_300", "lsint"]
+                           + (REGIME_FEATS if USE_REGIME else [])))
         ytr = (tr[f"{head}__y"].values >= 0).astype(int)
         yva = (va[f"{head}__y"].values >= 0).astype(int)
         dm = _fit(dict(objective="binary", learning_rate=0.05, num_leaves=63, min_data_in_leaf=2000),
@@ -229,7 +238,7 @@ def main():
         results[head]["first_passage"] = fres
         models[head] = {"head": hm, "touch": tm, "fp": fm, "direct": dm}
 
-        tag = f"{head}_{EVAL}"
+        tag = f"{head}_{EVAL}{TAG}"
         with open(os.path.join(OUT, f"results_{tag}.json"), "w") as fh:
             json.dump(results[head], fh, indent=1, default=float)
         with open(os.path.join(OUT, f"log_{tag}.txt"), "w") as fh:

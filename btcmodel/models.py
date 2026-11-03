@@ -164,19 +164,21 @@ class EmpiricalDist:
 class HeadModel:
     """Scale + drift + residual law + calibrated event layers for one horizon head."""
 
-    def __init__(self, head: str, extra_dir_feats: list[str] | None = None, seed: int = 0):
+    def __init__(self, head: str, extra_dir_feats: list[str] | None = None, seed: int = 0,
+                 regime_feats: list[str] | None = None):
         self.head = head
         self.extra = extra_dir_feats or []
+        self.regime = regime_feats or []
         self.seed = seed
         edges = np.array([1, 11, 31, 61, 121, 201, 301]) if head == "close" else np.array([0, 10 ** 6])
         self.dist = EmpiricalDist(edges)
 
     # ------------------------------------------------------------------ helpers
     def _vf(self):
-        return VOL_FEATS + ["lH", "lproj_300", "lproj_3600", "lsint"]
+        return VOL_FEATS + ["lH", "lproj_300", "lproj_3600", "lsint"] + getattr(self, "regime", [])
 
     def _df(self):
-        return DIR_FEATS + ["lH", "z_naive"] + self.extra
+        return DIR_FEATS + ["lH", "z_naive"] + self.extra + getattr(self, "regime", [])
 
     def _scale_target(self, df):
         return np.clip(np.abs(df[f"{self.head}__inc"].values) / df["naive_scale"].values, 0, 25)
@@ -264,10 +266,12 @@ class HeadModel:
         log(f"[{h}] up-calibration: {self.calib_rounds} rounds; top features: {top_gain(m, cf)}")
         return self
 
-    @staticmethod
-    def calib_feats():
-        return ["z_struct", "mu", "lsig_rel", "e", "lH", "lrvsa_300", "lcnt_ratio", "jump_300",
+    def calib_feats(self):
+        base = ["z_struct", "mu", "lsig_rel", "e", "lH", "lrvsa_300", "lcnt_ratio", "jump_300",
                 "som", "hod_et", "x_v", "ncross", "pi0"]
+        reg = [f for f in ("reg_rv_1d_7d", "reg_catchup_1h", "reg_vr300_1d", "reg_volvol_1d")
+               if f in getattr(self, "regime", [])]
+        return base + reg
 
     # ------------------------------------------------------------------ predicting
     def prepare(self, d: pd.DataFrame) -> pd.DataFrame:
