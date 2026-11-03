@@ -388,7 +388,8 @@ class FeatureEngine:
         F["prev2_ret_v"] = f32((b.ls[T0 - W - 1] - b.lopen[T0 - 2 * W]) / (v * np.sqrt(W)))
         # multi-timeframe candle opens (15m, 1h, 4h, UTC day)
         for P, nm in [(900, "15m"), (3600, "1h"), (14400, "4h"), (86400, "1d")]:
-            st = T0 // P * P
+            # candle boundaries in absolute (epoch) time, so any buffer alignment works
+            st = (b.t0_epoch + T0) // P * P - b.t0_epoch
             el = np.maximum((T0 + e) - st, 1)
             F[f"mtf_{nm}"] = f32((cur - b.lopen[st]) / (v * np.sqrt(el)))
         # round numbers ($1000 / $100 grid), signed distance in vol units over the window

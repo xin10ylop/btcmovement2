@@ -22,7 +22,10 @@ import pandas as pd
 from scipy.special import logit
 
 from .features import Base, FeatureEngine, W
-from .models import add_derived
+from scipy.special import expit
+from .models import add_derived, VOL_FEATS, DIR_FEATS
+
+DIRECT_FEATS = sorted(set(VOL_FEATS + DIR_FEATS + ["lH", "z_naive", "lproj_300", "lsint"]))
 from .events import TOUCH_LEVELS, FP_LEVELS, TOUCH_FEATS, FP_FEATS
 from .prob import p_touch, p_double_barrier
 
@@ -97,6 +100,8 @@ class Predictor:
         out = {"window_start_epoch": int(buf.t0_epoch + T0), "elapsed_s": int(e), "P0": p0,
                "price_now": float(np.exp(aux["cur"][0])), "heads": {}}
         for head, h in HEAD_H.items():
+            if head not in self.models:
+                continue
             H = (W - e) if h is None else h
             if e + H > W:
                 continue
@@ -113,7 +118,13 @@ class Predictor:
                     d[c] = (d[c] / d["naive_scale"]).astype(np.float32)
             hm = self.models[head]["head"]
             hm.prepare(d)
-            r = {"horizon_s": int(H), "p_above_ref": float(hm.p_up(d)[0])}
+            p_m = float(hm.p_up(d)[0])
+            dm = self.models[head]["direct"]
+            p_d = float(dm.predict(d[DIRECT_FEATS], num_iteration=dm.best_iteration)[0])
+            p_m, p_d = min(max(p_m, 1e-5), 1 - 1e-5), min(max(p_d, 1e-5), 1 - 1e-5)
+            r = {"horizon_s": int(H),
+                 "p_above_ref": float(expit(0.5 * logit(p_m) + 0.5 * logit(p_d))),
+                 "p_above_ref_structured": p_m, "p_above_ref_direct": p_d}
             q = hm.quantiles(d, np.array(QLEVELS))[0]
             r["quantiles_usd"] = {str(a): float(p0 * np.exp(v)) for a, v in zip(QLEVELS, q)}
             r["scale_bps"] = float(d["sig"].values[0] * 1e4)

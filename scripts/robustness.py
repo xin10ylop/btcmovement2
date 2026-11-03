@@ -27,7 +27,8 @@ def main():
             continue
         P = pickle.load(open(f, "rb"))
         y, e, day = P["y"], P["e"], P["day"]
-        p0, pm, pd_ = P["p"]["B0_naive"], P["p"]["M_final"], P["p"]["D_directGBM"]
+        p0, pd_ = P["p"]["B0_naive"], P["p"]["D_directGBM"]
+        pm = P["p"].get("E_blend", P["p"]["M_final"])   # final forecast
         l0, lm, ld = logloss(y, p0), logloss(y, pm), logloss(y, pd_)
         out.append(f"\n##### {head} ({SPLIT}) #####")
         # 1. month by month

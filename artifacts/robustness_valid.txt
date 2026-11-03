@@ -1,0 +1,17 @@
+
+##### h30 (valid) #####
+month-by-month log-loss skill vs naive Gaussian:
+  month      n  LL_naive  LL_model  skill_%  skill_direct_%  ECE_model
+2026-01 475200    0.3421    0.3091   9.6428         10.0463     0.0043
+2026-02 443520    0.3303    0.3191   3.3860          3.1827     0.0059
+2026-03 491040    0.3373    0.3228   4.2803          4.1477     0.0039
+2026-04 475200    0.3341    0.3130   6.3412          6.3732     0.0051
+months with positive skill: 4/4
+uncertain zone (0.2<p_naive<0.8, 31.8% of rows): LL naive=0.6257 model=0.6043 skill=3.42%  dLL=-0.02140 CI[-0.02755,-0.01591]
+e=0 (start of window): AUC model=0.5646 direct=0.5758; LL naive=0.69315 model=0.68581 (skill 1.06%); Brier model=0.24632
+    e=0 dLL model-naive=-0.00734 CI[-0.01013,-0.00463]
+model p in [0.0,0.02): n=260052, mean p=0.0065, observed=0.0066
+model p in [0.02,0.1): n=235636, mean p=0.0529, observed=0.0484
+model p in [0.9,0.98): n=241490, mean p=0.9458, observed=0.9522
+model p in [0.98,1.0): n=253949, mean p=0.9936, observed=0.9937
+directional AUC (sign of move from now): 0.5860

@@ -124,6 +124,9 @@ def main():
                   tr[feats], ytr, va[feats], yva, es=100)
         p["D_directGBM"] = np.clip(dm.predict(ev[feats], num_iteration=dm.best_iteration), 1e-5, 1 - 1e-5)
         log(f"[{head}] direct GBM: {dm.best_iteration} rounds")
+        # pre-registered final forecast (chosen on h30 validation, weight NOT tuned further):
+        # equal-weight logit blend of the structured model and the direct GBM
+        p["E_blend"] = expit(0.5 * logit(p["M_final"]) + 0.5 * logit(p["D_directGBM"]))
 
         res = []
         for k, pk in p.items():
@@ -146,9 +149,10 @@ def main():
             if m.sum() == 0:
                 continue
             rr = {"e_bucket": str(b), "n": int(m.sum())}
-            for k in ["B0_naive", "B1_volmodel", "B3_struct", "M_final", "D_directGBM"]:
+            for k in ["B0_naive", "B1_volmodel", "B3_struct", "M_final", "D_directGBM", "E_blend"]:
                 rr[k] = float(logloss(y[m], p[k][m]).mean())
             rr["skill_M_vs_B0_%"] = 100 * (1 - rr["M_final"] / rr["B0_naive"])
+            rr["skill_E_vs_B0_%"] = 100 * (1 - rr["E_blend"] / rr["B0_naive"])
             rows.append(rr)
         log(pd.DataFrame(rows).to_string(index=False))
         results[head] = {"up_table": res, "by_e": rows}
