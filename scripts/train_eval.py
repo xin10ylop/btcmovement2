@@ -113,7 +113,7 @@ def main():
         p["B0_naive"] = np.clip(ndtr(x / (ev["v"].values * np.sqrt(H))), 1e-5, 1 - 1e-5)
         sd = ev["sig"].values / SQ2PI
         p["B1_volmodel"] = np.clip(ndtr(x / sd), 1e-5, 1 - 1e-5)
-        p["B2_fattail"] = np.clip(hm.dist.sf(-x / ev["sig"].values, ev[f"{head}__H"].values), 1e-5, 1 - 1e-5)
+        p["B2_fattail"] = np.clip(hm.struct_up(ev, use_drift=False), 1e-5, 1 - 1e-5)
         p["B3_struct"] = ev["p_struct"].values
         p["M_final"] = hm.p_up(ev)
         # direct GBM rival

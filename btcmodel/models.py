@@ -201,11 +201,31 @@ class HeadModel:
             f"model={np.mean((ys_va - sc_va) ** 2):.4f}")
         log(f"[{h}] scale top features (gain share): {top_gain(m, self._vf())}")
 
+        # ---- zero-move atom: pi0 = P(R == 0 | state) ----
+        # ties resolve "up", and at short horizons the price frequently does not move at
+        # all (48% with 1s left, 7.5% over 30s in 2025), so the atom is modelled explicitly.
+        for d in (tr, va):
+            d["lsig_rel"] = np.log(d["sig"].values / d["naive_scale"].values).astype(np.float32)
+        zf = self._zf()
+        z_tr = (tr[f"{h}__inc"].values == 0).astype(int)
+        z_va = (va[f"{h}__inc"].values == 0).astype(int)
+        m = _fit(dict(P, objective="binary", num_leaves=31, min_data_in_leaf=5000), tr[zf], z_tr, va[zf], z_va)
+        self.zero_rounds = max(m.best_iteration, 1)
+        self.zero_model = m
+        pz_va = m.predict(va[zf], num_iteration=self.zero_rounds)
+        pz_oof = np.empty(len(tr))
+        for itr, ipr in time_folds(tr["day"].values):
+            mm = _fit(dict(P, objective="binary", num_leaves=31, min_data_in_leaf=5000),
+                      tr[zf].iloc[itr], z_tr[itr], fixed_rounds=self.zero_rounds)
+            pz_oof[ipr] = mm.predict(tr[zf].iloc[ipr])
+        tr["pi0"], va["pi0"] = np.clip(pz_oof, 0, 0.95), np.clip(pz_va, 0, 0.95)
+        log(f"[{h}] zero-move atom: {self.zero_rounds} rounds; valid rate={z_va.mean():.4f}, "
+            f"logloss const={-np.mean(z_va * np.log(z_tr.mean()) + (1 - z_va) * np.log(1 - z_tr.mean())):.4f} "
+            f"model={-np.mean(z_va * np.log(np.clip(pz_va, 1e-6, 1)) + (1 - z_va) * np.log(np.clip(1 - pz_va, 1e-6, 1))):.4f}")
+
         # ---- drift (standardized) ----
         u_tr = np.clip(tr[f"{h}__inc"].values / tr["sig"].values, -8, 8)
         u_va = np.clip(va[f"{h}__inc"].values / va["sig"].values, -8, 8)
-        for d in (tr, va):
-            d["lsig_rel"] = np.log(d["sig"].values / d["naive_scale"].values).astype(np.float32)
         dfeat = self._df() + ["lsig_rel"]
         m = _fit(dict(P, learning_rate=0.05, num_leaves=31, min_data_in_leaf=5000), tr[dfeat], u_tr,
                  va[dfeat], u_va)
@@ -224,13 +244,16 @@ class HeadModel:
         self.dfeat = dfeat
 
         # ---- residual law from OOF residuals ----
-        eps = np.clip(tr[f"{h}__inc"].values / tr["sig"].values - tr["mu"].values, -50, 50)
-        self.dist.fit(eps, tr[f"{h}__H"].values)
+        # identity: E[R / sig_c | R != 0] = E[R] / sig = mu  (with sig_c = sig / (1 - pi0))
+        nz = tr[f"{h}__inc"].values != 0
+        sig_c = tr["sig"].values / (1 - tr["pi0"].values)
+        eps = np.clip(tr[f"{h}__inc"].values / sig_c - tr["mu"].values, -50, 50)
+        self.dist.fit(eps[nz], tr[f"{h}__H"].values[nz])
 
         # ---- P(up) calibration from structural prior ----
         for d in (tr, va):
             d["p_struct"] = np.clip(self.struct_up(d), 1e-5, 1 - 1e-5)
-            d["z_struct"] = (-d["xcur"].values / d["sig"].values - d["mu"].values).astype(np.float32)
+            d["z_struct"] = self._z(d).astype(np.float32)
         cf = self.calib_feats()
         y_tr, y_va = (tr[f"{h}__y"].values >= 0).astype(int), (va[f"{h}__y"].values >= 0).astype(int)
         m = _fit(dict(P, objective="binary", learning_rate=0.04, num_leaves=15, min_data_in_leaf=20000,
@@ -244,26 +267,40 @@ class HeadModel:
     @staticmethod
     def calib_feats():
         return ["z_struct", "mu", "lsig_rel", "e", "lH", "lrvsa_300", "lcnt_ratio", "jump_300",
-                "som", "hod_et", "x_v", "ncross"]
+                "som", "hod_et", "x_v", "ncross", "pi0"]
 
     # ------------------------------------------------------------------ predicting
     def prepare(self, d: pd.DataFrame) -> pd.DataFrame:
         sc = self.scale_model.predict(d[self._vf()], num_iteration=self.scale_rounds)
         d["sig"] = np.maximum(sc, 0.05) * d["naive_scale"].values
         d["lsig_rel"] = np.log(d["sig"].values / d["naive_scale"].values).astype(np.float32)
+        d["pi0"] = np.clip(self.zero_model.predict(d[self._zf()], num_iteration=self.zero_rounds), 0, 0.95)
         d["mu"] = self.drift_model.predict(d[self.dfeat], num_iteration=self.drift_rounds)
         d["p_struct"] = np.clip(self.struct_up(d), 1e-5, 1 - 1e-5)
-        d["z_struct"] = (-d["xcur"].values / d["sig"].values - d["mu"].values).astype(np.float32)
+        d["z_struct"] = self._z(d).astype(np.float32)
         return d
 
-    def struct_up(self, d):
-        z = -d["xcur"].values / d["sig"].values - d["mu"].values
-        return self.dist.sf(z, d[f"{self.head}__H"].values)
+    def _zf(self):
+        return self._vf() + ["lsig_rel"]
+
+    @staticmethod
+    def _sig_c(d):
+        return d["sig"].values / (1 - d["pi0"].values)
+
+    def _z(self, d, level=0.0, use_drift=True):
+        return (level - d["xcur"].values) / self._sig_c(d) - (d["mu"].values if use_drift else 0.0)
+
+    def struct_up(self, d, use_drift=True):
+        """P(S_T >= P0) = pi0 * 1{x >= 0} + (1 - pi0) * P_c(R >= -x)."""
+        pc = self.dist.sf(self._z(d, 0.0, use_drift), d[f"{self.head}__H"].values)
+        pi0 = d["pi0"].values
+        return pi0 * (d["xcur"].values >= 0) + (1 - pi0) * pc
 
     def struct_terminal_sf(self, d, level_log):
-        """P(log(S_T/P0) >= level) from the structural law (level array or scalar)."""
-        z = (level_log - d["xcur"].values) / d["sig"].values - d["mu"].values
-        return self.dist.sf(np.asarray(z, float), d[f"{self.head}__H"].values)
+        """P(log(S_T/P0) >= level) from the structural law."""
+        pc = self.dist.sf(np.asarray(self._z(d, level_log), float), d[f"{self.head}__H"].values)
+        pi0 = d["pi0"].values
+        return pi0 * (d["xcur"].values >= level_log) + (1 - pi0) * pc
 
     def p_up(self, d):
         if self.calib_rounds <= 0:
@@ -273,9 +310,31 @@ class HeadModel:
                                            raw_score=True))
 
     def quantiles(self, d, alphas):
-        """Quantiles of log(S_target/P0)."""
-        q = self.dist.ppf_many(np.asarray(alphas), d[f"{self.head}__H"].values)
-        return d["xcur"].values[:, None] + d["sig"].values[:, None] * (d["mu"].values[:, None] + q)
+        """Quantiles of log(S_target/P0) under the atom + continuous mixture.
+
+        F(r) = pi0 * 1{r >= 0} + (1 - pi0) * F_c(r),  F_c the continuous law of R."""
+        alphas = np.asarray(alphas, float)
+        H = d[f"{self.head}__H"].values
+        pi0 = d["pi0"].values[:, None]
+        sc, mu, x = self._sig_c(d)[:, None], d["mu"].values[:, None], d["xcur"].values[:, None]
+        b = self.dist.bucket(H)
+        # F_c(0) for every row: P(eps <= -mu)
+        fc0 = 1 - self.dist.sf(-d["mu"].values, H)[:, None]
+        lo = (1 - pi0) * fc0                  # mass strictly below 0
+        a = alphas[None, :]
+        lev = np.where(a < lo, a / (1 - pi0), np.where(a > lo + pi0, (a - pi0) / (1 - pi0), np.nan))
+        lev = np.clip(lev, 0, 1)
+        q = np.zeros_like(lev)
+        for j in range(len(self.dist.edges) - 1):
+            m = b == j
+            if m.any():
+                q[m] = np.interp(lev[m], self.dist.LEVELS, self.dist.q[j])
+        in_atom = (a >= lo) & (a <= lo + pi0)     # quantile falls on "no move"
+        r = sc * (mu + q)
+        r = np.where(a < lo, np.minimum(r, 0.0), np.maximum(r, 0.0))   # side of the atom
+        r = np.where(in_atom, 0.0, r)
+        r = np.maximum.accumulate(r, axis=1)      # interpolation noise must not break order
+        return x + r
 
     # ---- BM-equivalent parameters for path events ----
     def bm_params(self, d):
