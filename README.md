@@ -276,15 +276,21 @@ python -m tests.test_regime_no_lookahead
 python -m tests.test_predictor_consistency _wf5 test h10 h15 h30 h60 close
 ```
 
-Live inference (`btcmodel/predictor.py`) with the packaged, holdout-evaluated models
-(`models/wf5_20260430/`, trained through 2026-04-30, 31 MB):
+Two packaged model sets are included (same architecture, features and hyper-parameters):
+
+| directory | trained on | use |
+|---|---|---|
+| `models/wf5_20260430/` | 2025-01 → 2026-04-30 | **the holdout-evaluated models** - every number in section 6 |
+| `models/prod_20261102/` | 2025-01 → 2026-11-02 (2025 thinned to every other window = recency tilt; early stopping on 2026-10-03 → 11-02) | **deployment** - the same recipe refit on the newest data; no untouched data remains to score it, so its quality is inferred from the wf5 holdout |
+
+Live inference (`btcmodel/predictor.py`):
 
 ```python
 from btcmodel.predictor import Predictor
 from btcmodel.recalibration import OnlineRecalibrator
 
 rc = OnlineRecalibrator()                       # optional, adopted for 10s/15s/30s/close
-pred = Predictor.load_dir("models/wf5_20260430", recalibrator=rc)
+pred = Predictor.load_dir("models/prod_20261102", recalibrator=rc)   # or models/wf5_20260430
 pred.ingest(arrays, t0_epoch)   # >= 9 days of 1s spot klines + perp 1s bars (fields as in
                                 # btcmodel/timeline.FIELDS), buffer starting on an hour boundary
 out = pred.predict(now_epoch_second, p0=window_open_price)
@@ -297,8 +303,11 @@ out["heads"]["close"]["first_passage"]["+/-10bps"]    # up-first / down-first / 
 ```
 
 `python scripts/demo_live.py` replays a holdout window second by second through this exact
-interface (it only ever sees data up to the decision second). For trading tomorrow, refit on
-everything first: `BTC_REGIME=1 python scripts/train_production.py --old-thin 2`.
+interface (it only ever sees data up to the decision second). To refresh the deployment models
+later (recommended monthly): download the new days, rebuild the caches, then run
+`BTC_REGIME=1 python scripts/train_production.py --old-thin 2 --resume` and
+`python scripts/package_models.py prod models/prod_<date>`. Needs ~10 GB RAM per head and
+~1 h per head on 4 CPUs; each head runs in its own process (`--resume` skips finished heads).
 
 ## 9. Repository map
 
@@ -312,7 +321,8 @@ everything first: `BTC_REGIME=1 python scripts/train_production.py --old-thin 2`
 | `btcmodel/prob.py` | Brownian barrier formulas, scoring rules, day-block bootstrap |
 | `btcmodel/predictor.py` | live inference (`Predictor.load_dir`) |
 | `btcmodel/recalibration.py` | causal online recalibrator |
-| `models/wf5_20260430/` | packaged final models (holdout-evaluated) + clock seasonality |
+| `models/wf5_20260430/` | packaged holdout-evaluated models + clock seasonality |
+| `models/prod_20261102/` | packaged deployment models, refit through 2026-11-02 |
 | `research/` | the studies behind every design decision (2025/validation data only) |
 | `scripts/` | training, frozen evaluation, walk-forward, robustness, regime analysis, figures |
 | `artifacts/` | results (JSON/text), tables, figures, pre-registration |
