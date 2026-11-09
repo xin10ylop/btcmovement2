@@ -21,6 +21,11 @@ calibrated (ECE ≤ 0.0125). Directional AUC 0.66 at 10 s decaying to 0.54 for t
 direction at the open - an honest picture of where BTC is and is not predictable.
 See section 6.
 
+> **ETH:** the same system for ETHUSDT - with its own research phase, an ETH-specific
+> overshoot-reversion component, holdout results and packaged models - lives in
+> [xin10ylop/eth3](https://github.com/xin10ylop/eth3). Its research also found that ETH's
+> perpetual leads BTC spot (+17% R² at 10 s for BTC), a candidate upgrade for this model.
+
 ---
 
 ## 1. Definitions (the reference never moves)
