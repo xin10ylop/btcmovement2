@@ -1,0 +1,12 @@
+h60 T0=42645300 e=20: batch structured=0.676315 live structured=0.676315 | batch blend=0.681484 live blend=0.681484
+close T0=42645300 e=20: batch structured=0.560517 live structured=0.560517 | batch blend=0.563377 live blend=0.563377
+h10 T0=55586700 e=55: batch structured=0.642655 live structured=0.642655 | batch blend=0.645076 live blend=0.645076
+h15 T0=55586700 e=55: batch structured=0.620613 live structured=0.620613 | batch blend=0.615203 live blend=0.615203
+h30 T0=55586700 e=55: batch structured=0.541667 live structured=0.541667 | batch blend=0.527533 live blend=0.527533
+h60 T0=55586700 e=55: batch structured=0.523636 live structured=0.523636 | batch blend=0.528248 live blend=0.528248
+close T0=55586700 e=55: batch structured=0.508400 live structured=0.508400 | batch blend=0.495209 live blend=0.495209
+max |batch - live| = 0.0
+fallback ok T0=50171100 e=250
+fallback ok T0=49553700 e=140
+fallback ok T0=54060900 e=95
+fallback: max |batch(fallback) - live| = 0.0

@@ -21,6 +21,12 @@ calibrated (ECE ≤ 0.0125). Directional AUC 0.66 at 10 s decaying to 0.54 for t
 direction at the open - an honest picture of where BTC is and is not predictable.
 See section 6.
 
+**Cross-asset add-on (ETH, pre-registered, adopted on validation):** BTC spot is the slowest of
+the BTC/ETH spot and perp markets, so ETH's perpetual carries information BTC has not priced
+yet. Adding 20 causal ETH features lifts holdout skill to **19.0% / 15.8% / 11.1% / 7.5% / 8.0%**
+(paired gain significant on the 10s-60s heads, better in 7 of 7 months each; on the close head
+the same small gain as on validation, −0.0001 log-loss, but its CI includes zero). See section 6b.
+
 ---
 
 ## 1. Definitions (the reference never moves)
@@ -44,7 +50,12 @@ Binance public archive (`data.binance.vision`), 2025-01-01 → 2026-11-02, 671 d
 SHA-256 verified:
 * spot BTCUSDT 1-second klines (OHLC, volume, taker-buy volume, trade count) – the reference market;
 * USD-M perpetual BTCUSDT aggTrades, aggregated to 1s bars (price, taker buy/sell volume,
-  trade count, largest aggressive order) – the price-discovery market.
+  trade count, largest aggressive order) – the price-discovery market;
+* (cross-asset add-on) the same two series for **ETHUSDT**, on the identical second grid
+  (both timelines start 2025-01-01), stored separately (`/home/user/data_eth`).
+
+The archive has no USD-M aggTrades file for 2026-10-28 (404 for both symbols); that holdout day
+has no perp data in either market (cross-asset features are NaN there, 0.55% of holdout rows).
 
 Splits (chronological, 1-day embargo):
 
@@ -91,6 +102,12 @@ All research in `research/` uses 2025 data only.
    Spot became structurally more efficient (it lags the perp less), so the main directional
    signal is weaker in 2026 than in the training year. A regime-blind model would keep
    trusting the 2025 strength of that signal.
+6. **ETH leads BTC, not the other way round** (2025-only linear probe from the ETH
+   replication, xin10ylop/eth3 `research/r2_btc_leads_eth.py`): at 1 s,
+   corr(BTC spot[t+1], ETH perp[t]) = 0.157 vs corr(ETH spot[t+1], BTC perp[t]) = 0.094. Adding
+   ETH perp/spot moves and a "BTC lagging ETH" gap to BTC's own signals raised the next-10s OOS
+   R² from 5.07% to 5.91% (next-60s 1.99% → 2.30%); BTC added almost nothing to ETH. The
+   perpetuals lead both spots and BTC spot is the slowest of the four markets.
 
 ## 4. Model
 
@@ -130,6 +147,11 @@ Each head models `R = sigma * (mu + eps)`:
   vol-standardized 4h/1d trend, perp premium level, activity regime. They enter the scale,
   atom, drift, calibration and direct models, so that the models condition on the regime
   instead of averaging over it.
+* **cross-asset add-on** (`btcmodel/xasset.py`, opt-in `BTC_XASSET=1`) - 20 strictly causal
+  ETH features: ETH perp moves over 1/2/3/5/10/30/60/300 s (ETH vol units), the "BTC lagging
+  ETH" gap (BTC spot move − rolling-1h beta × ETH perp move) over the same lags (BTC vol units),
+  ETH spot moves over 1/5/30 s, and the 1h beta. They enter the **drift model and the direct
+  GBM** only (directional information); scale, atom and calibration are unchanged.
 * **calibration from the prior** - a small LightGBM whose `init_score` is the structural
   logit; it can only move away from the structural answer when that lowers out-of-sample
   loss (early stopping on the validation set).
@@ -241,6 +263,59 @@ head x stratum cells; even on the 5% most volatile days skill is 2.4-7.0%.
 
 Full tables for every head: `artifacts/tables_test_wf5.md`. Figures: `artifacts/figures/`.
 
+## 6b. Cross-asset add-on: what ETH is worth (pre-registered, paired)
+
+Protocol (`artifacts/PREREGISTRATION.md`, amendment 2, committed before any model with these
+features was fitted): feature set frozen from the 2025 probe; decision on **validation only**
+with two arms identical except for the ETH features - A `_r5` (regime-aware) vs B `_rx5` (+ ETH),
+both fitted on 2025, early-stopped and scored on Jan-Apr 2026. Rule: adopt iff the close head's
+blended log-loss improves with a day-block CI excluding zero **and** no shorter head is worse.
+
+**Validation decision** (`artifacts/compare_valid_r5_vs_rx5.txt`, 119 days) - **adopted**:
+
+| head | skill A | skill B | ΔLL B−A [95% CI] | drift R² A → B | dir. AUC A → B |
+|---|---|---|---|---|---|
+| 10 s | 12.09% | 12.44% | −0.00076 [−0.00086, −0.00067] | 5.46% → 6.14% | 0.630 → 0.639 |
+| 15 s | 9.59% | 9.86% | −0.00069 [−0.00078, −0.00060] | 4.54% → 5.11% | 0.616 → 0.623 |
+| 30 s | 6.28% | 6.46% | −0.00061 [−0.00073, −0.00051] | 2.88% → 3.24% | 0.587 → 0.593 |
+| 60 s | 4.05% | 4.13% | −0.00035 [−0.00047, −0.00024] | 1.56% → 1.76% | 0.560 → 0.564 |
+| close | 5.59% | 5.61% | **−0.00011 [−0.00022, −0.00001]** | 1.10% → 1.25% | 0.548 → 0.552 |
+
+(The validation skills are lower than the holdout's because these research arms are fitted on
+2025 only and cannot know the close-pressure regime that appeared in Feb 2026.) The drift R²
+gain at 10 s (+0.69 pp, ×1.13) reproduces the 2025 probe (+0.85 pp, ×1.17) out of sample.
+
+**Holdout** (WF-x5 = the WF-v5 recipe + ETH features, refit walk-forward through 2026-04-30,
+scored once; paired with the current WF-v5 on identical rows, `artifacts/compare_test_wf5_vs_wfx5.txt`,
+breakdown `artifacts/xasset_test_wf5_vs_wfx5.md`):
+
+| head | naive Gaussian | WF-v5 | **WF-x5** | skill v5 → x5 | ΔLL x5 − v5 [95% CI] | ECE x5 | dir. AUC v5 → x5 | drift R² v5 → x5 | months better |
+|---|---|---|---|---|---|---|---|---|---|
+| 10 s | 0.2169 | 0.1767 | **0.1757** | 18.6% → **19.0%** | −0.00094 [−0.00103, −0.00086] | 0.0011 | 0.662 → **0.672** | 6.8% → **7.7%** | 7/7 |
+| 15 s | 0.2576 | 0.2179 | **0.2170** | 15.4% → **15.8%** | −0.00090 [−0.00100, −0.00082] | 0.0015 | 0.650 → 0.658 | 6.0% → 6.7% | 7/7 |
+| 30 s | 0.3421 | 0.3048 | **0.3040** | 10.9% → **11.1%** | −0.00082 [−0.00093, −0.00073] | 0.0018 | 0.620 → 0.627 | 4.3% → 4.7% | 7/7 |
+| 60 s | 0.4422 | 0.4096 | **0.4090** | 7.4% → **7.5%** | −0.00058 [−0.00071, −0.00047] | 0.0019 | 0.589 → 0.593 | 2.6% → 2.8% | 7/7 |
+| 5 m close | 0.5289 | 0.4867 | 0.4866 | 8.0% → 8.0% | −0.00009 [−0.00021, +0.00002] | 0.0124 | 0.566 → 0.569 | 1.7% → 1.8% | 5/7 |
+
+* **Short heads: clean replication.** Every 10s-60s gain is significant and larger than on
+  validation, positive in every holdout month, and largest at the window open (10 s at `e = 0`:
+  skill 6.9% → 7.5%, ΔLL −0.0041), where the head knows least about its own window. Touch and
+  first-passage skill rise by 0.1-0.4 pp on every short head with unchanged calibration.
+* **Close head: not shown either way.** The gain is the same size as on validation but its CI
+  now includes zero. Where it acts moved: on validation (models fitted on 2025) it helped early
+  in the window and hurt in the final 30 s (+0.0003, significant); on the holdout (walk-forward,
+  fitted on data that include the 2026 close-pressure regime) it is neutral before the last
+  minute and helps in it (final 30 s: −0.00067 [−0.00086, −0.00048]). Per the pre-registered rule
+  11 the add-on stays adopted (the close head is not significantly worse), and the cross-asset
+  models are the deployment default.
+* **Data check.** Before any of this, the packaged WF-v5 models were re-scored on the
+  re-downloaded holdout: naive, scale model, direct GBM and touch layer reproduce the committed
+  numbers bit for bit (the structured path differs by ≤ 5e-6 log-loss from the compacted
+  residual law), so both arms see exactly the original data.
+* **Live = batch.** `tests/test_predictor_consistency.py` feeds raw BTC + ETH second buffers to
+  the live `Predictor`: max |batch − live| = 0.0 on all five WF-x5 heads, and with the ETH feed
+  stale the regime-only fallback reproduces WF-v5 exactly (`artifacts/predictor_consistency_wfx5.txt`).
+
 ## 7. Honest limitations
 
 * **The 5-minute direction at the open is barely predictable** (AUC ~0.54 at `e = 0` on the
@@ -253,6 +328,12 @@ Full tables for every head: `artifacts/tables_test_wf5.md`. Figures: `artifacts/
 * **No costs, fees, latency or market impact** are modelled - these are probability
   forecasts, not a trading strategy. A forecast edge in log-loss is an edge in Kelly growth
   only against a counterparty pricing with the weaker forecast and before costs.
+* **The cross-asset models need a second live feed.** ETH spot and perp 1s bars must arrive on
+  the same second grid as BTC; feed latency between venues is not modelled. In training the ETH
+  side was essentially never missing (0.0005% of rows), so the predictor does not feed NaNs to
+  these models: when ETH data are missing, stale or gapped it answers with a regime-only model
+  set (`fallback=`, labelled in the output). The ETH lead is a market-structure property and
+  can weaken like the perp->spot lead did in 2026 - monitor it with the monthly refit.
 * **Regimes drift.** The close-pressure regime appeared in Feb 2026 and may change or
   vanish. The model reads its current intensity online (`reg_cp*`), but nothing replaces
   retraining: refit monthly (`scripts/train_production.py`), run the online recalibrator,
@@ -276,12 +357,30 @@ python -m tests.test_regime_no_lookahead
 python -m tests.test_predictor_consistency _wf5 test h10 h15 h30 h60 close
 ```
 
-Two packaged model sets are included (same architecture, features and hyper-parameters):
+Cross-asset add-on (section 6b; staged driver: `scripts/run_xasset_pipeline.sh`):
+
+```bash
+BTC_ASSET=ETH python -m btcmodel.data 2025-01-01 2026-11-02 6   # ETHUSDT spot 1s + perp aggTrades
+BTC_ASSET=ETH python -m btcmodel.timeline                      # same second grid as BTC
+python scripts/build_xasset.py                                 # <split>_xasset.parquet (BTC cache)
+python -m tests.test_xasset_no_lookahead
+BTC_REGIME=1 BTC_XASSET=1 BTC_EVENTS=0 BTC_TAG=_rx5 python scripts/train_eval.py valid h10   # research arm
+BTC_REGIME=1 BTC_XASSET=1 python scripts/train_production.py h10 --end 2026-04-30 --tag _wfx5 --resume
+BTC_REGIME=1 BTC_XASSET=1 BTC_TAG=_wfx5 python scripts/evaluate_saved.py test h10
+python scripts/compare_versions.py test _wf5 _wfx5             # paired, identical rows
+python scripts/xasset_report.py test _wf5 _wfx5                # by elapsed time and month
+python -m tests.test_predictor_consistency _wfx5 test h10 h15 h30 h60 close --fallback _wf5
+```
+
+Four packaged model sets are included (same architecture and hyper-parameters; the `x` sets add
+the 20 ETH features):
 
 | directory | trained on | use |
 |---|---|---|
 | `models/wf5_20260430/` | 2025-01 → 2026-04-30 | **the holdout-evaluated models** - every number in section 6 |
-| `models/prod_20261102/` | 2025-01 → 2026-11-02 (2025 thinned to every other window = recency tilt; early stopping on 2026-10-03 → 11-02) | **deployment** - the same recipe refit on the newest data; no untouched data remains to score it, so its quality is inferred from the wf5 holdout |
+| `models/prod_20261102/` | 2025-01 → 2026-11-02 (2025 thinned to every other window = recency tilt; early stopping on 2026-10-03 → 11-02) | deployment, BTC only - the same recipe refit on the newest data; no untouched data remains to score it, so its quality is inferred from the wf5 holdout. **Fallback** for the `prodx` set |
+| `models/wfx5_20260430/` | 2025-01 → 2026-04-30, + ETH | the holdout-evaluated cross-asset models - every WF-x5 number in section 6b |
+| `models/prodx_20261102/` | as `prod_20261102`, + ETH | **deployment default** (cross-asset); needs the ETH feed, falls back to `prod_20261102` without it |
 
 Live inference (`btcmodel/predictor.py`):
 
@@ -290,10 +389,14 @@ from btcmodel.predictor import Predictor
 from btcmodel.recalibration import OnlineRecalibrator
 
 rc = OnlineRecalibrator()                       # optional, adopted for 10s/15s/30s/close
-pred = Predictor.load_dir("models/prod_20261102", recalibrator=rc)   # or models/wf5_20260430
-pred.ingest(arrays, t0_epoch)   # >= 9 days of 1s spot klines + perp 1s bars (fields as in
-                                # btcmodel/timeline.FIELDS), buffer starting on an hour boundary
+pred = Predictor.load_dir("models/prodx_20261102", recalibrator=rc,   # cross-asset (default)
+                          fallback="models/prod_20261102")            # BTC-only if ETH is missing
+pred.ingest(arrays, t0_epoch,   # >= 9 days of 1s spot klines + perp 1s bars (fields as in
+            xarrays=eth_arrays) # btcmodel/timeline.FIELDS), buffer starting on an hour boundary;
+                                # eth_arrays: the same fields for ETHUSDT on the same second grid
+                                # (BTC-only sets: Predictor.load_dir("models/prod_20261102"), no xarrays)
 out = pred.predict(now_epoch_second, p0=window_open_price)
+out["model"]                                          # "cross-asset" or "fallback (...)"
 out["heads"]["close"]["p_above_ref"]                  # P(5m close >= P0)
 out["heads"]["h10"]["p_above_ref"]                    # P(price in 10 s >= P0)
 out["heads"]["h30"]["quantiles_usd"]                  # price distribution 30 s ahead, in $
@@ -316,6 +419,7 @@ later (recommended monthly): download the new days, rebuild the caches, then run
 | `btcmodel/data.py`, `timeline.py` | download, checksum, compaction, continuous 1s timeline |
 | `btcmodel/features.py` | causal features, reference-relative targets, window path stats |
 | `btcmodel/regime.py` | online regime-state features (incl. close pressure) |
+| `btcmodel/xasset.py` | cross-asset (ETH) add-on features, causal |
 | `btcmodel/models.py` | head model: scale, no-move atom, drift, residual law, calibration |
 | `btcmodel/events.py` | touch and first-passage layers |
 | `btcmodel/prob.py` | Brownian barrier formulas, scoring rules, day-block bootstrap |
@@ -323,7 +427,9 @@ later (recommended monthly): download the new days, rebuild the caches, then run
 | `btcmodel/recalibration.py` | causal online recalibrator |
 | `models/wf5_20260430/` | packaged holdout-evaluated models + clock seasonality |
 | `models/prod_20261102/` | packaged deployment models, refit through 2026-11-02 |
+| `models/wfx5_20260430/`, `models/prodx_20261102/` | the same two sets with the cross-asset add-on |
 | `research/` | the studies behind every design decision (2025/validation data only) |
 | `scripts/` | training, frozen evaluation, walk-forward, robustness, regime analysis, figures |
 | `artifacts/` | results (JSON/text), tables, figures, pre-registration |
-| `tests/` | lookahead tests, live-vs-batch consistency |
+| `scripts/build_xasset.py`, `run_xasset_pipeline.sh`, `xasset_report.py` | cross-asset cache, staged pipeline, paired report |
+| `tests/` | lookahead tests (incl. cross-asset), live-vs-batch consistency (incl. ETH buffer and fallback) |
