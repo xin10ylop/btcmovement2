@@ -417,6 +417,8 @@ later (recommended monthly): download the new days, rebuild the caches, then run
 `BTC_REGIME=1 python scripts/train_production.py --old-thin 2 --resume` and
 `python scripts/package_models.py prod models/prod_<date>`. Needs ~10 GB RAM per head and
 ~1 h per head on 4 CPUs; each head runs in its own process (`--resume` skips finished heads).
+With the cross-asset add-on (`BTC_XASSET=1`) the full-history refit of the 10 s head peaks at
+~14 GB resident: on a 15 GB machine enable a few GB of swap (it was OOM-killed without it).
 
 ## 9. Repository map
 
