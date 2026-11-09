@@ -68,3 +68,14 @@ Nothing below has been looked at on 2026 data.
     close head is significantly WORSE on the holdout (CI entirely above zero) this is reported as a
     failed replication and the default deployment stays on the regime-only models.
     Online recalibration remains governed by rule 4.
+
+### Decision under rule 10 (recorded after the validation comparison, before any holdout scoring of B)
+
+`artifacts/compare_valid_r5_vs_rx5.txt` (validation, 119 days, E_blend, all rows, dLL = B - A):
+h10 -0.00076 [-0.00086, -0.00067], h15 -0.00069 [-0.00078, -0.00060], h30 -0.00061 [-0.00073, -0.00051],
+h60 -0.00035 [-0.00047, -0.00024], **close -0.00011 [-0.00022, -0.00001]** (full precision
+-0.000113 [-0.000219, -0.000008]; 10,000 resamples [-0.000213, -0.000013]).
+(a) holds (close CI entirely below zero) and (b) holds (every shorter head < 0): **ADOPTED**.
+Noted, not part of the rule: the close-head gain is small, and in its final 30 s B is significantly
+worse (+0.00032 [+0.00013, +0.00053]); the gain is concentrated early in the window (close at e = 0:
+-0.00029 [-0.00052, -0.00006]; h10 at e = 0: -0.00337). Proceeding to rule 11 (WF-x5).
