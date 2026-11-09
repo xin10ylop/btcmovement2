@@ -37,7 +37,9 @@ HEAD_ORDER = os.environ.get("BTC_HEADS", "h10,h15,h30,h60,close").split(",")  # 
 EXTRA_TARGET_HEADS = ("h10", "h15")                  # targets live in <split>_targets_extra.parquet
 ONLY = sys.argv[2] if len(sys.argv) > 2 else None
 USE_REGIME = os.environ.get("BTC_REGIME", "0") == "1"     # opt-in regime-state features
+USE_XASSET = os.environ.get("BTC_XASSET", "0") == "1"     # opt-in cross-asset (ETH) features
 TAG = os.environ.get("BTC_TAG", "")                       # version suffix for outputs
+EVENTS = os.environ.get("BTC_EVENTS", "1") == "1"         # 0: skip touch / first-passage layers
 os.makedirs(STACK_DIR, exist_ok=True)
 LOG = []
 PREDS = {}
@@ -67,6 +69,10 @@ def load_head(split, head):
         d = pd.concat([d, x], axis=1)
     if USE_REGIME:
         r = pd.read_parquet(os.path.join(CACHE, f"{split}_regime.parquet"))
+        assert len(r) == len(d)
+        d = pd.concat([d, r], axis=1)
+    if USE_XASSET:
+        r = pd.read_parquet(os.path.join(CACHE, f"{split}_xasset.parquet"))
         assert len(r) == len(d)
         d = pd.concat([d, r], axis=1)
     d = d[d[f"{head}__valid"].values].reset_index(drop=True)
@@ -105,8 +111,10 @@ def main():
                 d[f"mu_{sh}_px"] = (d[f"mu_{sh}_px"] / d["naive_scale"]).astype(np.float32)
             extra.append(f"mu_{sh}_px")
         from btcmodel.regime import REGIME_FEATS
+        from btcmodel.xasset import XASSET_FEATS
         hm = HeadModel(head, extra_dir_feats=extra,
-                       regime_feats=REGIME_FEATS if USE_REGIME else None).fit(tr, va, log=log)
+                       regime_feats=REGIME_FEATS if USE_REGIME else None,
+                       xasset_feats=XASSET_FEATS if USE_XASSET else None).fit(tr, va, log=log)
         if ev is not va:
             hm.prepare(ev)
         models[head] = hm
@@ -130,7 +138,7 @@ def main():
         p["M_final"] = hm.p_up(ev)
         # direct GBM rival
         feats = sorted(set(VOL_FEATS + DIR_FEATS + ["lH", "z_naive", "lproj_300", "lsint"]
-                           + (REGIME_FEATS if USE_REGIME else [])))
+                           + (REGIME_FEATS if USE_REGIME else []) + (XASSET_FEATS if USE_XASSET else [])))
         ytr = (tr[f"{head}__y"].values >= 0).astype(int)
         yva = (va[f"{head}__y"].values >= 0).astype(int)
         dm = _fit(dict(objective="binary", learning_rate=0.05, num_leaves=63, min_data_in_leaf=2000),
@@ -186,60 +194,62 @@ def main():
             f"skill={100 * (1 - pin(Q) / pin(Qn)):.2f}%")
         results[head]["quantiles"] = {"coverage": cover, "pinball_model": pin(Q), "pinball_naive": pin(Qn)}
 
-        # ------------------------------------------------ touch probabilities
-        sub = lambda d, f: d.iloc[::f].reset_index(drop=True)
-        trs = sub(tr, 3)
-        tr_rows, va_rows = touch_rows(trs, head, hm), touch_rows(sub(va, 2), head, hm)
-        tm = TouchModel().fit(tr_rows, va_rows, log=log)
-        del tr_rows, va_rows
-        ev_rows = touch_rows(ev, head, hm)
-        pt = tm.predict(ev_rows)
-        pn = naive_touch(ev, head)
-        yt = ev_rows["y"].values
-        trs_res = []
-        for k in sorted(ev_rows["k"].unique()):
-            m = ev_rows["k"].values == k
-            trs_res.append({"level_bps": int(k), "n": int(m.sum()), "rate": float(yt[m].mean()),
-                            "LL_naiveBM": float(logloss(yt[m], pn[m]).mean()),
-                            "LL_structBM": float(logloss(yt[m], ev_rows["p_struct"].values[m]).mean()),
-                            "LL_final": float(logloss(yt[m], pt[m]).mean()),
-                            "ECE_final": float(ece(yt[m], pt[m]))})
-        tt = pd.DataFrame(trs_res)
-        tt["skill_vs_naive_%"] = 100 * (1 - tt["LL_final"] / tt["LL_naiveBM"])
-        log(f"\n[{head}] TOUCH P(reach P0*(1+k) within horizon), non-trivial cases:")
-        log(tt.to_string(index=False))
-        m_all, lo, hi, _ = block_bootstrap_diff(logloss(yt, pt), logloss(yt, pn), ev_rows["day"].values)
-        log(f"[{head}] touch: dLL final - naive = {m_all:.5f}  95% CI [{lo:.5f}, {hi:.5f}]")
-        results[head]["touch"] = trs_res
+        tm = fm = None
+        if EVENTS:
+            # ------------------------------------------------ touch probabilities
+            sub = lambda d, f: d.iloc[::f].reset_index(drop=True)
+            trs = sub(tr, 3)
+            tr_rows, va_rows = touch_rows(trs, head, hm), touch_rows(sub(va, 2), head, hm)
+            tm = TouchModel().fit(tr_rows, va_rows, log=log)
+            del tr_rows, va_rows
+            ev_rows = touch_rows(ev, head, hm)
+            pt = tm.predict(ev_rows)
+            pn = naive_touch(ev, head)
+            yt = ev_rows["y"].values
+            trs_res = []
+            for k in sorted(ev_rows["k"].unique()):
+                m = ev_rows["k"].values == k
+                trs_res.append({"level_bps": int(k), "n": int(m.sum()), "rate": float(yt[m].mean()),
+                                "LL_naiveBM": float(logloss(yt[m], pn[m]).mean()),
+                                "LL_structBM": float(logloss(yt[m], ev_rows["p_struct"].values[m]).mean()),
+                                "LL_final": float(logloss(yt[m], pt[m]).mean()),
+                                "ECE_final": float(ece(yt[m], pt[m]))})
+            tt = pd.DataFrame(trs_res)
+            tt["skill_vs_naive_%"] = 100 * (1 - tt["LL_final"] / tt["LL_naiveBM"])
+            log(f"\n[{head}] TOUCH P(reach P0*(1+k) within horizon), non-trivial cases:")
+            log(tt.to_string(index=False))
+            m_all, lo, hi, _ = block_bootstrap_diff(logloss(yt, pt), logloss(yt, pn), ev_rows["day"].values)
+            log(f"[{head}] touch: dLL final - naive = {m_all:.5f}  95% CI [{lo:.5f}, {hi:.5f}]")
+            results[head]["touch"] = trs_res
 
-        # ------------------------------------------------ first passage
-        ftr, fva = fp_rows(trs, head, hm), fp_rows(sub(va, 2), head, hm)
-        fm = FirstPassageModel().fit(ftr, fva, log=log)
-        del ftr, fva
-        fev = fp_rows(ev, head, hm)
-        fnv = fp_rows(ev, head, hm, naive=True)
-        Pf = fm.predict(fev)
-        fres = []
-        for k in sorted(fev["k"].unique()):
-            m = fev["k"].values == k
-            mn = fnv["k"].values == k
-            yk = fev["y"].values[m]
-            Pn = fnv[["pn", "pu", "pd"]].values[mn]
-            Ps = fev[["pn", "pu", "pd"]].values[m]
-            # among windows where one barrier was hit, P(up first) accuracy
-            hitm = yk > 0
-            pu_cond = Pf[m][hitm, 1] / (Pf[m][hitm, 1] + Pf[m][hitm, 2])
-            fres.append({"k_bps": int(k), "n": int(m.sum()), "P_up_first": float((yk == 1).mean()),
-                         "P_dn_first": float((yk == 2).mean()),
-                         "MLL_naive": float(mlogloss(fnv["y"].values[mn], Pn).mean()),
-                         "MLL_struct": float(mlogloss(yk, Ps).mean()),
-                         "MLL_final": float(mlogloss(yk, Pf[m]).mean()),
-                         "AUC_upfirst|hit": float(auc((yk[hitm] == 1).astype(int), pu_cond))})
-        ft = pd.DataFrame(fres)
-        ft["skill_vs_naive_%"] = 100 * (1 - ft["MLL_final"] / ft["MLL_naive"])
-        log(f"\n[{head}] FIRST PASSAGE (+/-k around P0): classes neither/up-first/down-first")
-        log(ft.to_string(index=False))
-        results[head]["first_passage"] = fres
+            # ------------------------------------------------ first passage
+            ftr, fva = fp_rows(trs, head, hm), fp_rows(sub(va, 2), head, hm)
+            fm = FirstPassageModel().fit(ftr, fva, log=log)
+            del ftr, fva
+            fev = fp_rows(ev, head, hm)
+            fnv = fp_rows(ev, head, hm, naive=True)
+            Pf = fm.predict(fev)
+            fres = []
+            for k in sorted(fev["k"].unique()):
+                m = fev["k"].values == k
+                mn = fnv["k"].values == k
+                yk = fev["y"].values[m]
+                Pn = fnv[["pn", "pu", "pd"]].values[mn]
+                Ps = fev[["pn", "pu", "pd"]].values[m]
+                # among windows where one barrier was hit, P(up first) accuracy
+                hitm = yk > 0
+                pu_cond = Pf[m][hitm, 1] / (Pf[m][hitm, 1] + Pf[m][hitm, 2])
+                fres.append({"k_bps": int(k), "n": int(m.sum()), "P_up_first": float((yk == 1).mean()),
+                             "P_dn_first": float((yk == 2).mean()),
+                             "MLL_naive": float(mlogloss(fnv["y"].values[mn], Pn).mean()),
+                             "MLL_struct": float(mlogloss(yk, Ps).mean()),
+                             "MLL_final": float(mlogloss(yk, Pf[m]).mean()),
+                             "AUC_upfirst|hit": float(auc((yk[hitm] == 1).astype(int), pu_cond))})
+            ft = pd.DataFrame(fres)
+            ft["skill_vs_naive_%"] = 100 * (1 - ft["MLL_final"] / ft["MLL_naive"])
+            log(f"\n[{head}] FIRST PASSAGE (+/-k around P0): classes neither/up-first/down-first")
+            log(ft.to_string(index=False))
+            results[head]["first_passage"] = fres
         models[head] = {"head": hm, "touch": tm, "fp": fm, "direct": dm}
 
         tag = f"{head}_{EVAL}{TAG}"

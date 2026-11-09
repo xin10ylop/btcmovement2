@@ -22,6 +22,10 @@ def main():
     when = np.datetime64(sys.argv[2] if len(sys.argv) > 2 else "2026-10-20T14:35")
     pred = Predictor.load_dir(path)
     tl = load_timeline()
+    xtl = None
+    if pred.needs_xasset:                       # cross-asset models also read the ETH market
+        from btcmodel.config import XDATA_DIR
+        xtl = load_timeline(XDATA_DIR)
     T0 = int((when - np.datetime64("2025-01-01")) / np.timedelta64(1, "s")) // 300 * 300
     start = (T0 - 9 * 86400) // 3600 * 3600
     p0 = float(tl["s_open"][T0])
@@ -29,7 +33,8 @@ def main():
     print(" e    price      vs P0   P(10s>=P0) P(30s>=P0) P(close>=P0)  close 5%..95% ($)        P(touch +10bps) P(+/-10 up first)")
     for e in [0, 30, 60, 120, 180, 240, 270, 290]:
         arrays = {f: np.asarray(tl[f][start:T0 + e]) for f in FIELDS}
-        pred.ingest(arrays, tl.t0_epoch + start)
+        xarrays = None if xtl is None else {f: np.asarray(xtl[f][start:T0 + e]) for f in FIELDS}
+        pred.ingest(arrays, tl.t0_epoch + start, xarrays=xarrays)
         out = pred.predict(tl.t0_epoch + T0 + e, p0=p0)
         hd = out["heads"]
         c = hd["close"]

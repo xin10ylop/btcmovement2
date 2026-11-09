@@ -19,3 +19,10 @@ ART_DIR = os.path.join(ROOT, "artifacts") if ASSET == "BTC" else os.path.join(RO
 FIG_DIR = os.path.join(ART_DIR, "figures")
 for _d in (MODEL_DIR, STACK_DIR, FIG_DIR):
     os.makedirs(_d, exist_ok=True)
+
+# Cross-asset add-on (btcmodel/xasset.py): the second market whose 1s timeline is read
+# alongside the primary one.  Both timelines must start on the same day (identical
+# second indexing).  Only used when BTC_XASSET=1 (training) or when a model needs it (live).
+XASSET = os.environ.get("BTC_XASSET_SYMBOL", "ETH" if ASSET == "BTC" else "BTC").upper()
+XDATA_DIR = os.environ.get("BTC_XDATA_DIR",
+                           "/home/user/data" if XASSET == "BTC" else f"/home/user/data_{XASSET.lower()}")

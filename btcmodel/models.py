@@ -183,10 +183,13 @@ class HeadModel:
     """Scale + drift + residual law + calibrated event layers for one horizon head."""
 
     def __init__(self, head: str, extra_dir_feats: list[str] | None = None, seed: int = 0,
-                 regime_feats: list[str] | None = None):
+                 regime_feats: list[str] | None = None, xasset_feats: list[str] | None = None):
         self.head = head
         self.extra = extra_dir_feats or []
         self.regime = regime_feats or []
+        # cross-asset features (btcmodel/xasset.py) are directional information: they enter
+        # the drift model only (and the direct GBM), not scale / atom / calibration
+        self.xasset = xasset_feats or []
         self.seed = seed
         edges = np.array([1, 11, 31, 61, 121, 201, 301]) if head == "close" else np.array([0, 10 ** 6])
         # (fixed-horizon heads h10/h15/h30/h60 use a single residual-law bucket)
@@ -197,7 +200,8 @@ class HeadModel:
         return VOL_FEATS + ["lH", "lproj_300", "lproj_3600", "lsint"] + getattr(self, "regime", [])
 
     def _df(self):
-        return DIR_FEATS + ["lH", "z_naive"] + self.extra + getattr(self, "regime", [])
+        return (DIR_FEATS + ["lH", "z_naive"] + self.extra + getattr(self, "regime", [])
+                + getattr(self, "xasset", []))
 
     def _scale_target(self, df):
         return np.clip(np.abs(df[f"{self.head}__inc"].values) / df["naive_scale"].values, 0, 25)

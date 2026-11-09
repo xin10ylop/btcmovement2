@@ -12,6 +12,10 @@
 
 Inputs are the same fields as the archive (see data.py): spot 1s klines and perp
 aggTrades aggregated to 1s.  The buffer must start on an hour boundary.
+
+Models trained with the cross-asset add-on (btcmodel/xasset.py, `head.xasset` non-empty)
+also need the second market (ETHUSDT spot 1s klines + perp 1s bars, same fields) on the
+SAME second grid:  pred.ingest(btc_arrays, t0_epoch, xarrays=eth_arrays).
 """
 from __future__ import annotations
 
@@ -52,6 +56,12 @@ class Predictor:
         self.season = season
         self.recal = recalibrator          # optional btcmodel.recalibration.OnlineRecalibrator
         self.buf = None
+        self.xbuf = None                   # second market (cross-asset add-on), same grid
+
+    @property
+    def needs_xasset(self) -> bool:
+        """True if any loaded head uses cross-asset features (then ingest needs `xarrays`)."""
+        return any(getattr(m["head"], "xasset", []) for m in self.models.values())
 
     @staticmethod
     def load_dir(path: str, recalibrator=None):
@@ -76,10 +86,15 @@ class Predictor:
             season = pickle.load(fh)
         return Predictor(models, season)
 
-    def ingest(self, arrays: dict, t0_epoch: int):
-        """arrays: dict of per-second arrays (fields as in timeline.FIELDS) starting at t0_epoch."""
+    def ingest(self, arrays: dict, t0_epoch: int, xarrays: dict | None = None):
+        """arrays: dict of per-second arrays (fields as in timeline.FIELDS) starting at t0_epoch.
+        xarrays: the second market's arrays on the same grid (same start, one entry per
+        second), required when the models use cross-asset features."""
         assert t0_epoch % 3600 == 0, "buffer must start on an hour boundary"
         self.buf = _Buffer(arrays, t0_epoch)
+        self.xbuf = None if xarrays is None else _Buffer(xarrays, t0_epoch)
+        if self.needs_xasset:
+            assert self.xbuf is not None, "these models use cross-asset features: pass xarrays"
 
     def predict(self, epoch_second: int, p0: float | None = None) -> dict:
         """p0: the reference (first trade of the window). If None it is read from the buffer
@@ -115,6 +130,12 @@ class Predictor:
             R = regime_features(src, np.array([T0]), np.array([e]))
             for k in R.columns:
                 X[k] = R[k].values
+        if self.needs_xasset:
+            from .xasset import xasset_features
+            assert self.xbuf.n >= i, "second-market buffer does not reach the decision time"
+            R = xasset_features(src, self.xbuf, np.array([T0]), np.array([e]))
+            for k in R.columns:
+                X[k] = R[k].values
         X["xcur"] = aux["cur"] - aux["p0"]
         X["v"] = aux["v"].astype(np.float32)
         p0 = float(np.exp(aux["p0"][0]))
@@ -141,7 +162,7 @@ class Predictor:
             hm.prepare(d)
             p_m = float(hm.p_up(d)[0])
             dm = self.models[head]["direct"]
-            dfe = sorted(set(DIRECT_FEATS + list(getattr(hm, "regime", []))))
+            dfe = sorted(set(DIRECT_FEATS + list(getattr(hm, "regime", [])) + list(getattr(hm, "xasset", []))))
             p_d = float(dm.predict(d[dfe], num_iteration=dm.best_iteration)[0])
             p_m, p_d = min(max(p_m, 1e-5), 1 - 1e-5), min(max(p_d, 1e-5), 1 - 1e-5)
             p_blend = float(expit(0.5 * logit(p_m) + 0.5 * logit(p_d)))

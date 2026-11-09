@@ -90,9 +90,10 @@ class Timeline:
     d1: date
     n: int
     present: np.ndarray
+    tl_dir: str = TL_DIR
 
     def __getitem__(self, k: str) -> np.ndarray:
-        return np.load(os.path.join(TL_DIR, k + ".npy"), mmap_mode="r")
+        return np.load(os.path.join(self.tl_dir, k + ".npy"), mmap_mode="r")
 
     @property
     def t0_epoch(self) -> int:
@@ -105,11 +106,14 @@ class Timeline:
         return (d - self.d0).days * SEC_PER_DAY
 
 
-def load_timeline() -> Timeline:
-    with open(os.path.join(TL_DIR, "meta.txt")) as fh:
+def load_timeline(data_dir: str | None = None) -> Timeline:
+    """Timeline of the configured asset, or of the asset whose data lives in `data_dir`
+    (e.g. config.XDATA_DIR for the cross-asset timeline)."""
+    d = TL_DIR if data_dir is None else os.path.join(data_dir, "timeline")
+    with open(os.path.join(d, "meta.txt")) as fh:
         a, b, n = fh.read().split()
     return Timeline(date.fromisoformat(a), date.fromisoformat(b), int(n),
-                    np.load(os.path.join(TL_DIR, "meta_days_present.npy")))
+                    np.load(os.path.join(d, "meta_days_present.npy")), d)
 
 
 if __name__ == "__main__":

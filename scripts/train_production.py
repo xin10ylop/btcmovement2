@@ -34,7 +34,8 @@ ES_DAYS = 30
 
 def main(heads, end=None, tag=None, old_thin=1, resume=False):
     from btcmodel.regime import REGIME_FEATS
-    from train_eval import USE_REGIME
+    from btcmodel.xasset import XASSET_FEATS
+    from train_eval import USE_REGIME, USE_XASSET
     for head in heads:
         name = f"models_{head}_valid{tag}.pkl" if tag else f"prod_{head}.pkl"
         stack = [os.path.join(STACK_DIR, f"prod{tag or ''}_{head}_{k}.parquet") for k in ("tr", "va")]
@@ -75,13 +76,14 @@ def main(heads, end=None, tag=None, old_thin=1, resume=False):
                 x[f"mu_{sh}_px"] = (x[f"mu_{sh}_px"] / x["naive_scale"]).astype(np.float32)
             extra.append(f"mu_{sh}_px")
         hm = HeadModel(head, extra_dir_feats=extra,
-                       regime_feats=REGIME_FEATS if USE_REGIME else None).fit(tr, va)
+                       regime_feats=REGIME_FEATS if USE_REGIME else None,
+                       xasset_feats=XASSET_FEATS if USE_XASSET else None).fit(tr, va)
         for x, key in ((tr, "tr"), (va, "va")):
             pd.DataFrame({"T0": x["T0"].values, "e": x["e"].values,
                           "drift_px": x["mu"].values * x["sig"].values}).to_parquet(
                 os.path.join(STACK_DIR, f"prod{tag or ''}_{head}_{key}.parquet"))
         feats = sorted(set(VOL_FEATS + DIR_FEATS + ["lH", "z_naive", "lproj_300", "lsint"]
-                           + (REGIME_FEATS if USE_REGIME else [])))
+                           + (REGIME_FEATS if USE_REGIME else []) + (XASSET_FEATS if USE_XASSET else [])))
         ytr, yva = (tr[f"{head}__y"].values >= 0).astype(int), (va[f"{head}__y"].values >= 0).astype(int)
         dm = _fit(dict(objective="binary", learning_rate=0.05, num_leaves=63, min_data_in_leaf=2000),
                   tr[feats], ytr, va[feats], yva, es=100)

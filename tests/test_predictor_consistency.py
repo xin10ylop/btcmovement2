@@ -16,6 +16,11 @@ def run(split="valid", heads=("h30",), n=6, seed=0, tag="", model_split="valid",
     models = {h: pickle.load(open(os.path.join(MODEL_DIR, f"models_{h}_{model_split}{tag}.pkl"), "rb")) for h in heads}
     preds = {h: pickle.load(open(os.path.join(MODEL_DIR, f"preds_{h}_{split}{tag}.pkl"), "rb")) for h in heads}
     pr = Predictor(models, load_season())
+    xtl = None
+    if pr.needs_xasset:                                   # cross-asset models: second market buffer
+        from btcmodel.config import XDATA_DIR
+        xtl = load_timeline(XDATA_DIR)
+        assert xtl.d0 == tl.d0
     rng = np.random.default_rng(seed)
     P = preds[heads[0]]
     worst = 0.0
@@ -24,7 +29,8 @@ def run(split="valid", heads=("h30",), n=6, seed=0, tag="", model_split="valid",
         start = (T0 - buffer_days * 86400) // 3600 * 3600   # hour-aligned buffer start
         end = T0 + e                                       # only what is known at decision time
         arrays = {f: np.asarray(tl[f][start:end]) for f in FIELDS}
-        pr.ingest(arrays, tl.t0_epoch + start)
+        xarrays = None if xtl is None else {f: np.asarray(xtl[f][start:end]) for f in FIELDS}
+        pr.ingest(arrays, tl.t0_epoch + start, xarrays=xarrays)
         out = pr.predict(tl.t0_epoch + T0 + e, p0=float(np.asarray(tl["s_open"][T0])))
         for h in heads:
             Ph = preds[h]
