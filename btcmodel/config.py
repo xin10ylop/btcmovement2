@@ -15,7 +15,8 @@ DATA_DIR = os.environ.get("BTC_DATA_DIR",
                           "/home/user/data" if ASSET == "BTC" else f"/home/user/data_{ASSET.lower()}")
 MODEL_DIR = os.path.join(DATA_DIR, "models")
 STACK_DIR = os.path.join(DATA_DIR, "stack")
-ART_DIR = os.path.join(ROOT, "artifacts") if ASSET == "BTC" else os.path.join(ROOT, "artifacts", ASSET.lower())
+ART_DIR = os.environ.get("BTC_ART_DIR") or (
+    os.path.join(ROOT, "artifacts") if ASSET == "BTC" else os.path.join(ROOT, "artifacts", ASSET.lower()))
 FIG_DIR = os.path.join(ART_DIR, "figures")
 for _d in (MODEL_DIR, STACK_DIR, FIG_DIR):
     os.makedirs(_d, exist_ok=True)

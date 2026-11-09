@@ -8,7 +8,8 @@
 #   timelines  BTC and ETH 1s timelines (identical second grid)
 #   caches     BTC features/targets, 10s/15s targets, regime and cross-asset caches
 #   tests      lookahead tests (base features, regime, cross-asset)
-#   wf5ref     holdout predictions of the CURRENT walk-forward model (models/wf5_20260430)
+#   wf5ref     holdout predictions of the CURRENT walk-forward model (models/wf5_20260430),
+#              reports to $D/wf5_repro (must reproduce artifacts/results_*_test_wf5.json)
 #   validA     research protocol, arm A = regime-aware (_r5)       } adoption rule 10
 #   validB     research protocol, arm B = + cross-asset (_rx5)     } (validation only)
 #   decide     paired comparison on validation
@@ -49,8 +50,11 @@ for h in ["h10", "h15", "h30", "h60", "close"]:
     pickle.dump(M, open(os.path.join(MODEL_DIR, f"models_{h}_valid_wf5.pkl"), "wb"))
 print("unpacked models/wf5_20260430 -> models_<head>_valid_wf5.pkl")
 EOF
+               # reports go to $D/wf5_repro (the committed artifacts/*_test_wf5.* come from the
+               # uncompacted models); the paired comparison only needs the predictions
                for h in $HEADS; do
-                 BTC_REGIME=1 BTC_TAG=_wf5 python scripts/evaluate_saved.py test $h > "$D/test_wf5_$h.log" 2>&1
+                 [ -f "$D/models/preds_${h}_test_wf5.pkl" ] && [ -f "$D/stack/${h}_test_test_wf5.parquet" ] && continue
+                 BTC_ART_DIR=$D/wf5_repro BTC_REGIME=1 BTC_TAG=_wf5 python scripts/evaluate_saved.py test $h > "$D/test_wf5_$h.log" 2>&1
                done ;;
     validA)    for h in $HEADS; do
                  BTC_REGIME=1 BTC_EVENTS=0 BTC_TAG=_r5 python scripts/train_eval.py valid $h > "$D/tv_r5_$h.log" 2>&1
