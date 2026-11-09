@@ -12,7 +12,7 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
-MD = "/home/user/data/models"
+from btcmodel.config import MODEL_DIR as MD, DATA_DIR  # noqa: E402
 
 
 def src_name(kind, head):
@@ -33,4 +33,4 @@ if __name__ == "__main__":
         with gzip.open(os.path.join(out, f"{h}.pkl.gz"), "wb", compresslevel=9) as fh:
             pickle.dump(M, fh, protocol=5)
         print(h, f"{os.path.getsize(os.path.join(out, f'{h}.pkl.gz')) / 1e6:.1f} MB")
-    shutil.copy("/home/user/data/cache/season.pkl", os.path.join(out, "season.pkl"))
+    shutil.copy(os.path.join(DATA_DIR, "cache", "season.pkl"), os.path.join(out, "season.pkl"))

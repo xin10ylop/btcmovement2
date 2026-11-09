@@ -26,7 +26,7 @@ from btcmodel.dataset import CACHE  # noqa: E402
 
 SPLIT = sys.argv[1] if len(sys.argv) > 1 else "test"
 TAG = sys.argv[2] if len(sys.argv) > 2 else ""
-MD = "/home/user/data/models"
+from btcmodel.config import MODEL_DIR as MD, ART_DIR  # noqa: E402
 T0_DATE = np.datetime64("2025-01-01")
 
 
@@ -128,7 +128,7 @@ def main():
             lines.append("   recal gain by month: " + ", ".join(mm))
     s = "\n".join(lines)
     print(s)
-    open(os.path.join(ROOT, "artifacts", f"regime_{SPLIT}{TAG}.txt"), "w").write(s)
+    open(os.path.join(ART_DIR, f"regime_{SPLIT}{TAG}.txt"), "w").write(s)
 
 
 if __name__ == "__main__":

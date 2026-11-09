@@ -27,16 +27,16 @@ import pyarrow.csv as pacsv
 import requests
 
 BASE = "https://data.binance.vision/data"
-DATA_DIR = os.environ.get("BTC_DATA_DIR", "/home/user/data")
+from .config import DATA_DIR, SYMBOL  # noqa: E402
 DAY_DIR = os.path.join(DATA_DIR, "days")
 SEC_PER_DAY = 86400
 
 
-def _url_spot_1s(d: date, symbol: str = "BTCUSDT") -> str:
+def _url_spot_1s(d: date, symbol: str = SYMBOL) -> str:
     return f"{BASE}/spot/daily/klines/{symbol}/1s/{symbol}-1s-{d.isoformat()}.zip"
 
 
-def _url_perp_agg(d: date, symbol: str = "BTCUSDT") -> str:
+def _url_perp_agg(d: date, symbol: str = SYMBOL) -> str:
     return f"{BASE}/futures/um/daily/aggTrades/{symbol}/{symbol}-aggTrades-{d.isoformat()}.zip"
 
 

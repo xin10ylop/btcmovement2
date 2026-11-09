@@ -16,12 +16,11 @@ from btcmodel.timeline import load_timeline  # noqa: E402
 
 SPLIT = sys.argv[1] if len(sys.argv) > 1 else "test"
 TAG = sys.argv[2] if len(sys.argv) > 2 else ""
-FIG = os.path.join(ROOT, "artifacts", "figures")
-os.makedirs(FIG, exist_ok=True)
+from btcmodel.config import FIG_DIR as FIG, MODEL_DIR  # noqa: E402
 
 
 def main(n=4, seed=3):
-    P = pickle.load(open(f"/home/user/data/models/preds_close_{SPLIT}{TAG}.pkl", "rb"))
+    P = pickle.load(open(os.path.join(MODEL_DIR, f"preds_close_{SPLIT}{TAG}.pkl"), "rb"))
     tl = load_timeline()
     sc = np.asarray(tl["s_close"])
     rng = np.random.default_rng(seed)

@@ -28,6 +28,6 @@ for ax in axs:
     ax.axvspan(np.datetime64("2026-05-02"), np.datetime64("2026-11-02"), color="#d9480f", alpha=0.10)
 axs[0].set_title("Regime drift in BTC microstructure (weekly means). blue = validation, orange = test")
 fig.tight_layout()
-os.makedirs(os.path.join(ROOT, "artifacts", "figures"), exist_ok=True)
-fig.savefig(os.path.join(ROOT, "artifacts", "figures", "regime_drift.png"), dpi=130)
+from btcmodel.config import FIG_DIR, ASSET  # noqa: E402
+fig.savefig(os.path.join(FIG_DIR, "regime_drift.png"), dpi=130)
 print("saved")

@@ -29,17 +29,15 @@ from btcmodel.models import HeadModel, add_derived, _fit, VOL_FEATS, DIR_FEATS, 
 from btcmodel.events import (touch_rows, naive_touch, TouchModel, fp_rows, FirstPassageModel)  # noqa: E402
 from btcmodel.prob import logloss, brier, ece, auc, block_bootstrap_diff, mlogloss  # noqa: E402
 
-OUT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "artifacts")
-MODEL_DIR = "/home/user/data/models"
+from btcmodel.config import ART_DIR as OUT, MODEL_DIR, STACK_DIR  # noqa: E402
 os.makedirs(OUT, exist_ok=True)
 os.makedirs(MODEL_DIR, exist_ok=True)
 EVAL = sys.argv[1] if len(sys.argv) > 1 else "valid"
-HEAD_ORDER = ["h10", "h15", "h30", "h60", "close"]   # shorter heads feed longer ones (stacking)
+HEAD_ORDER = os.environ.get("BTC_HEADS", "h10,h15,h30,h60,close").split(",")  # shorter feed longer (stacking)
 EXTRA_TARGET_HEADS = ("h10", "h15")                  # targets live in <split>_targets_extra.parquet
 ONLY = sys.argv[2] if len(sys.argv) > 2 else None
 USE_REGIME = os.environ.get("BTC_REGIME", "0") == "1"     # opt-in regime-state features
 TAG = os.environ.get("BTC_TAG", "")                       # version suffix for outputs
-STACK_DIR = "/home/user/data/stack"
 os.makedirs(STACK_DIR, exist_ok=True)
 LOG = []
 PREDS = {}

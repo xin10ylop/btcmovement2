@@ -11,9 +11,8 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-FIG = os.path.join(ROOT, "artifacts", "figures")
-os.makedirs(FIG, exist_ok=True)
 sys.path.insert(0, ROOT)
+from btcmodel.config import FIG_DIR as FIG, MODEL_DIR, ASSET  # noqa: E402
 
 C = {"E_blend": "#d9480f", "B0_naive": "#9aa0a6", "B1_volmodel": "#7fa7d9", "B3_struct": "#3b6fb6", "M_final": "#d9480f",
      "D_directGBM": "#6c9a3b"}
@@ -22,7 +21,7 @@ C = {"E_blend": "#d9480f", "B0_naive": "#9aa0a6", "B1_volmodel": "#7fa7d9", "B3_
 def main(split, tag=""):
     P = {}
     for head in ["h10", "h15", "h30", "h60", "close"]:
-        f = f"/home/user/data/models/preds_{head}_{split}{tag}.pkl"
+        f = os.path.join(MODEL_DIR, f"preds_{head}_{split}{tag}.pkl")
         if os.path.exists(f):
             with open(f, "rb") as fh:
                 P[head] = pickle.load(fh)

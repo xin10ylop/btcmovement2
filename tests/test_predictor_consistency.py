@@ -1,4 +1,5 @@
 """The live Predictor (raw buffer -> prediction) must reproduce the batch pipeline."""
+import os
 import pickle
 import sys
 
@@ -11,8 +12,9 @@ from btcmodel.timeline import load_timeline, FIELDS
 
 def run(split="valid", heads=("h30",), n=6, seed=0, tag="", model_split="valid", buffer_days=2):
     tl = load_timeline()
-    models = {h: pickle.load(open(f"/home/user/data/models/models_{h}_{model_split}{tag}.pkl", "rb")) for h in heads}
-    preds = {h: pickle.load(open(f"/home/user/data/models/preds_{h}_{split}{tag}.pkl", "rb")) for h in heads}
+    from btcmodel.config import MODEL_DIR
+    models = {h: pickle.load(open(os.path.join(MODEL_DIR, f"models_{h}_{model_split}{tag}.pkl"), "rb")) for h in heads}
+    preds = {h: pickle.load(open(os.path.join(MODEL_DIR, f"preds_{h}_{split}{tag}.pkl"), "rb")) for h in heads}
     pr = Predictor(models, load_season())
     rng = np.random.default_rng(seed)
     P = preds[heads[0]]

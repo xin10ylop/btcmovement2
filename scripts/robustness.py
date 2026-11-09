@@ -14,6 +14,7 @@ import pandas as pd
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 from btcmodel.prob import logloss, brier, ece, auc, block_bootstrap_diff  # noqa: E402
+from btcmodel.config import MODEL_DIR, ART_DIR  # noqa: E402
 
 SPLIT = sys.argv[1] if len(sys.argv) > 1 else "valid"
 TAG = sys.argv[2] if len(sys.argv) > 2 else ""
@@ -23,7 +24,7 @@ T0_DATE = np.datetime64("2025-01-01")
 def main():
     out = []
     for head in ["h10", "h15", "h30", "h60", "close"]:
-        f = f"/home/user/data/models/preds_{head}_{SPLIT}{TAG}.pkl"
+        f = os.path.join(MODEL_DIR, f"preds_{head}_{SPLIT}{TAG}.pkl")
         if not os.path.exists(f):
             continue
         P = pickle.load(open(f, "rb"))
@@ -69,7 +70,7 @@ def main():
         out.append(f"directional AUC (sign of move from now): {auc((inc[nz] > 0).astype(int), mu[nz]):.4f}")
     s = "\n".join(out)
     print(s)
-    with open(os.path.join(ROOT, "artifacts", f"robustness_{SPLIT}{TAG}.txt"), "w") as fh:
+    with open(os.path.join(ART_DIR, f"robustness_{SPLIT}{TAG}.txt"), "w") as fh:
         fh.write(s)
 
 

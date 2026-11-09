@@ -14,7 +14,7 @@ sys.path.insert(0, ROOT)
 from btcmodel.prob import logloss, block_bootstrap_diff, ece, auc  # noqa: E402
 
 SPLIT, A, B = sys.argv[1], sys.argv[2], sys.argv[3]
-MD = "/home/user/data/models"
+from btcmodel.config import MODEL_DIR as MD, ART_DIR  # noqa: E402
 
 
 def main():
@@ -44,7 +44,7 @@ def main():
                      f"B={auc((inc[nz] > 0).astype(int), Pb['mu'][nz]):.4f}")
     s = "\n".join(lines)
     print(s)
-    open(os.path.join(ROOT, "artifacts", f"compare_{SPLIT}{A or '_frozen'}_vs{B}.txt"), "w").write(s)
+    open(os.path.join(ART_DIR, f"compare_{SPLIT}{A or '_frozen'}_vs{B}.txt"), "w").write(s)
 
 
 if __name__ == "__main__":
