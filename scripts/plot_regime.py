@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 from btcmodel.dataset import CACHE
+from btcmodel.config import FIG_DIR, ASSET  # noqa: E402
 
 rows = []
 for s in ["train", "valid", "test"]:
@@ -26,8 +27,7 @@ axs[2].plot(W.index, np.sqrt(np.exp(W["reg_lrv_7d"]) * 365 * 86400) * 100, color
 for ax in axs:
     ax.axvspan(np.datetime64("2026-01-02"), np.datetime64("2026-04-30"), color="#7fa7d9", alpha=0.15)
     ax.axvspan(np.datetime64("2026-05-02"), np.datetime64("2026-11-02"), color="#d9480f", alpha=0.10)
-axs[0].set_title("Regime drift in BTC microstructure (weekly means). blue = validation, orange = test")
+axs[0].set_title(f"Regime drift in {ASSET} microstructure (weekly means). blue = validation, orange = test")
 fig.tight_layout()
-from btcmodel.config import FIG_DIR, ASSET  # noqa: E402
 fig.savefig(os.path.join(FIG_DIR, "regime_drift.png"), dpi=130)
 print("saved")
