@@ -308,6 +308,12 @@ breakdown `artifacts/xasset_test_wf5_vs_wfx5.md`):
   minute and helps in it (final 30 s: −0.00067 [−0.00086, −0.00048]). Per the pre-registered rule
   11 the add-on stays adopted (the close head is not significantly worse), and the cross-asset
   models are the deployment default.
+* **Regimes and recalibration** (`artifacts/regime_test_wfx5.txt`): skill stays significant in
+  every head x regime stratum (minimum 2.35%, on the 5% most volatile days). The online
+  recalibrator passes rule 4 for exactly the same heads as with WF-v5 (10s/15s/30s/close; close
+  ECE 0.0124 → 0.0034, ΔLL −0.00091 [−0.00153, −0.00035]; 60 s not adopted), so
+  `OnlineRecalibrator()` defaults are unchanged. After recalibration the close-head difference
+  between the two models shrinks further (0.48569 vs 0.48573).
 * **Data check.** Before any of this, the packaged WF-v5 models were re-scored on the
   re-downloaded holdout: naive, scale model, direct GBM and touch layer reproduce the committed
   numbers bit for bit (the structured path differs by ≤ 5e-6 log-loss from the compacted
