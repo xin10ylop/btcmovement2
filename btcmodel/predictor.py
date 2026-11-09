@@ -51,12 +51,15 @@ class _Buffer:
 
 
 class Predictor:
-    def __init__(self, models: dict, season, recalibrator=None):
+    def __init__(self, models: dict, season, recalibrator=None, fallback: "Predictor | None" = None):
         self.models = models
         self.season = season
         self.recal = recalibrator          # optional btcmodel.recalibration.OnlineRecalibrator
         self.buf = None
         self.xbuf = None                   # second market (cross-asset add-on), same grid
+        # cross-asset models never saw a missing second market in training (0.0005% of rows):
+        # when its data are absent, stale or gapped, answer with a model that does not need it
+        self.fallback = fallback
 
     @property
     def needs_xasset(self) -> bool:
@@ -64,8 +67,11 @@ class Predictor:
         return any(getattr(m["head"], "xasset", []) for m in self.models.values())
 
     @staticmethod
-    def load_dir(path: str, recalibrator=None):
-        """Load packaged models (e.g. models/wf5_20260430/{h10,h15,h30,h60,close}.pkl.gz)."""
+    def load_dir(path: str, recalibrator=None, fallback: "str | Predictor | None" = None):
+        """Load packaged models (e.g. models/wf5_20260430/{h10,h15,h30,h60,close}.pkl.gz).
+
+        fallback: for cross-asset models, a regime-only model set (directory or Predictor) used
+        whenever the second market's data are unavailable at the decision time."""
         import gzip
         import os
         models = {}
@@ -76,7 +82,9 @@ class Predictor:
                     models[h] = pickle.load(fh)
         with open(os.path.join(path, "season.pkl"), "rb") as fh:
             season = pickle.load(fh)
-        return Predictor(models, season, recalibrator)
+        if isinstance(fallback, str):
+            fallback = Predictor.load_dir(fallback, recalibrator)
+        return Predictor(models, season, recalibrator, fallback)
 
     @staticmethod
     def load(path: str, season_path: str):
@@ -93,8 +101,10 @@ class Predictor:
         assert t0_epoch % 3600 == 0, "buffer must start on an hour boundary"
         self.buf = _Buffer(arrays, t0_epoch)
         self.xbuf = None if xarrays is None else _Buffer(xarrays, t0_epoch)
-        if self.needs_xasset:
-            assert self.xbuf is not None, "these models use cross-asset features: pass xarrays"
+        if self.fallback is not None:
+            self.fallback.ingest(arrays, t0_epoch, xarrays)
+        if self.needs_xasset and self.fallback is None:
+            assert self.xbuf is not None, "these models use cross-asset features: pass xarrays (or a fallback)"
 
     def predict(self, epoch_second: int, p0: float | None = None) -> dict:
         """p0: the reference (first trade of the window). If None it is read from the buffer
@@ -132,15 +142,25 @@ class Predictor:
                 X[k] = R[k].values
         if self.needs_xasset:
             from .xasset import xasset_features
-            assert self.xbuf.n >= i, "second-market buffer does not reach the decision time"
-            R = xasset_features(src, self.xbuf, np.array([T0]), np.array([e]))
+            ok = self.xbuf is not None and self.xbuf.n >= i
+            if ok:
+                R = xasset_features(src, self.xbuf, np.array([T0]), np.array([e]))
+                ok = bool(np.isfinite(R.values).all())   # NaN = gap in the second market
+            if not ok:
+                if self.fallback is None:
+                    raise ValueError("second-market data missing or gapped at the decision time "
+                                     "(load with fallback=<regime-only model dir> to degrade gracefully)")
+                res = self.fallback.predict(epoch_second, p0)
+                res["model"] = "fallback (second-market data unavailable)"
+                return res
             for k in R.columns:
                 X[k] = R[k].values
         X["xcur"] = aux["cur"] - aux["p0"]
         X["v"] = aux["v"].astype(np.float32)
         p0 = float(np.exp(aux["p0"][0]))
         out = {"window_start_epoch": int(buf.t0_epoch + T0), "elapsed_s": int(e), "P0": p0,
-               "price_now": float(np.exp(aux["cur"][0])), "heads": {}}
+               "price_now": float(np.exp(aux["cur"][0])), "heads": {},
+               "model": "cross-asset" if self.needs_xasset else "single-asset"}
         for head, h in HEAD_H.items():
             if head not in self.models:
                 continue
@@ -176,8 +196,10 @@ class Predictor:
             r["scale_bps"] = float(d["sig"].values[0] * 1e4)
             r["drift_std"] = float(d["mu"].values[0])
             r["_drift_px"] = float(d["mu"].values[0] * d["sig"].values[0])
-            r["touch"] = self._touch(d, hm, self.models[head]["touch"])
-            r["first_passage"] = self._fp(d, hm, self.models[head]["fp"])
+            # (research-protocol models trained with BTC_EVENTS=0 have no event layers)
+            tm, fm = self.models[head].get("touch"), self.models[head].get("fp")
+            r["touch"] = None if tm is None else self._touch(d, hm, tm)
+            r["first_passage"] = None if fm is None else self._fp(d, hm, fm)
             out["heads"][head] = r
         for r in out["heads"].values():
             r.pop("_drift_px", None)
