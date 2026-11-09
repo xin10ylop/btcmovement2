@@ -79,3 +79,12 @@ h60 -0.00035 [-0.00047, -0.00024], **close -0.00011 [-0.00022, -0.00001]** (full
 Noted, not part of the rule: the close-head gain is small, and in its final 30 s B is significantly
 worse (+0.00032 [+0.00013, +0.00053]); the gain is concentrated early in the window (close at e = 0:
 -0.00029 [-0.00052, -0.00006]; h10 at e = 0: -0.00337). Proceeding to rule 11 (WF-x5).
+
+### Holdout outcome under rule 11 (WF-x5 scored once; `artifacts/compare_test_wf5_vs_wfx5.txt`)
+
+dLL(WF-x5 - WF-v5), E_blend, all holdout rows: h10 -0.00094 [-0.00103, -0.00086], h15 -0.00090
+[-0.00100, -0.00082], h30 -0.00082 [-0.00093, -0.00073], h60 -0.00058 [-0.00071, -0.00047] - the four
+short heads replicate (better in 7/7 months each); **close -0.000095 [-0.000207, +0.000019]**: same
+size as on validation, CI includes zero (better in 5/7 months). Not significantly worse, so the
+failed-replication clause does not apply: the cross-asset models become the deployment default,
+with the regime-only models kept as the live fallback when the ETH feed is unavailable.
